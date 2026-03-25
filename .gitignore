@@ -6,6 +6,7 @@ assets*/
 generated_envs
 .ipynb_checkpoints
 .hydra
+.env
 outputs
 *.json
 *.mp4
