@@ -11,3 +11,5 @@ pandas
 websockets
 msgpack
 huggingface_hub[cli]
+openai
+dotenv
