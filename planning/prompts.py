@@ -3,23 +3,121 @@ You will receive the following input:
 1. **Image input**: Two images
    - The first image shows the original observation from the robot’s right shoulder camera.
    - The second image contains the same observation, with each object labeled with its numeric identifier and outlined by a bounding box.
+
 2. **Language input**:
     - A task instruction describing the specific requirement. Based on this instruction, you need to generate a sequence of skill calls to fulfill the task.
     - A structured list of detected objects in the scene. Each object is represented as a dictionary with:
         - "product_id" — a unique identifier of the object (matches the ID shown on the annotated image),
-        - "product_name" — the name of the product,
-        - "bbox" — a list of four numbers [x_min, y_min, x_max, y_max] representing the bounding box of the object in image coordinates.
+        - "product_name" — the name of the product.
+    - History
 
 Available Skills:
-1. `pick_item(item_id: int)` 
-    - picks up the specified object using its identifier
-    - item_id corresponds to the object identifier shown in the labeled image and in the bounding box description
-2. `place_to_basket()`
-    - places the currently held object into the basket
+
+1. 'move_base_forward(delta: float)'
+   - Moves the robot base forward or backward along its current facing direction.
+   - Positive values move forward, negative values move backward.
+   - Used for fine adjustments in positioning.
+
+2. 'rotate_base(delta: float)'
+   - Rotates the robot base around the vertical axis.
+   - Positive values rotate counterclockwise, negative values rotate clockwise.
+   - Used to change the viewing or approach direction.
+
+3. 'drive_to_shelf'
+   - Moves the robot to a predefined position in front of the shelf.
+   - Typically used as the first step to approach the workspace.
+
+4. 'drive_to_product(item_id: int)'
+   - Navigates the robot base to a position in front of the specified product.
+   - Stops at a safe distance for further alignment and manipulation.
+
+5. 'align_to_product(item_id: int)'
+   - Rotates the robot base so that it directly faces the target product.
+   - Improves grasping success by aligning the robot with the object.
+
+6. 'move_base_towards_product(item_id: int)'
+   - Moves the robot base closer to the product for grasping.
+   - Stops at a predefined close distance suitable for manipulation.
+
+7. 'lift_ee(delta: float)'
+   - Moves the end-effector vertically (along its local axis).
+   - Used for small height adjustments during manipulation.
+
+8. 'move_ee_to_neutral_pose'
+   - Moves the end-effector to a default neutral position relative to the robot base.
+   - Safe resting pose, useful between operations.
+
+9. 'move_ee_to_product_height(item_id: int)'
+   - Adjusts the height of the end-effector to match the height of the target product.
+   - Ensures proper vertical alignment before grasping.
+
+10. 'grasp_product(item_id: int)'
+    - Executes a grasping motion on the specified product.
+    - Automatically computes a suitable grasp pose based on object geometry.
+    - Closes the gripper and attaches the object to the robot.
+
+11. 'drop_to_basket'
+    - Moves the held object to the basket location and releases it.
+    - Opens the gripper to drop the object into the basket.
 
 Task Requirements:
 Based on the image and language inputs, generate a sequence of skill calls. 
 Each skill call sequence should contain the skill name and the skill operation parameters (if the skill requires parameters).
+
+Important Constraints:
+- You must pick and place one object at a time.
+- You cannot pick a new item until the previously picked item has been placed into the basket.
+- Always ensure proper alignment and positioning before grasping.
+- Always ensure proper alignment and positioning before grasping.
+- If the plan includes picking multiple products, you MUST move the end-effector to a neutral pose before starting the next pick.
+
+Typical Execution Pattern (Example):
+
+To pick a product and place it into the basket, a typical sequence looks like:
+
+[
+    {"name": "drive_to_product", "params": {"item_id": 125}},
+    {"name": "align_to_product", "params": {"item_id": 125}},
+    {"name": "move_ee_to_product_height", "params": {"item_id": 125}},
+    {"name": "move_base_towards_product", "params": {"item_id": 125}},
+    {"name": "align_to_product", "params": {"item_id": 125}},
+    {"name": "grasp_product", "params": {"item_id": 125}},
+    {"name": "lift_ee", "params": {"delta": 0.05}},
+    {"name": "move_base_forward", "params": {"delta": -0.4}},
+    {"name": "drop_to_basket"},
+    {"name": "move_ee_to_neutral_pose"}
+]
+
+Explanation of the pattern:
+- First navigate close to the product
+- Align the robot to face the product
+- Adjust end-effector height
+- Move closer for grasping
+- Align again for precision
+- Grasp the object
+- Lift slightly to avoid collisions
+- Move backward from the shelf
+- Drop the object into the basket
+- Reset the end-effector to a neutral pose before the next pick (if any)
+
+You may adapt this sequence depending on the task, but it is strongly recommended to follow this structure.
+
+
+Replanning:
+- You must ALWAYS generate a COMPLETE plan from the current state to task completion.
+- Replanning is used only in case of a skill execution failure.
+- Use History to understand what has already been completed successfully.
+- If all previous actions were successful, continue the plan from the last completed step.
+- If a failure occurred, you MUST replan starting from the point of failure.
+- Do NOT repeat the exact same failed action with the same parameters.
+
+Failure Handling Strategy:
+- Try adjusting the robot base position:
+    - move slightly forward or backward using 'move_base_forward'
+    - rotate using 'rotate_base'
+    - approach the product from a different angle (e.g., rotate first, then move_base_forward, then align_to_porduct and move_base_towards_product)
+    - then retry alignment or approach
+
 
 Output Format: 
 Generate a skill call sequence in the following structure:
@@ -27,24 +125,28 @@ Generate a skill call sequence in the following structure:
     {
         "name": "Skill Name 1",
         "params": {
-            "parameter": "value"
+            "parameter": value
         }
     },
     {
         "name": "Skill Name 2",
         "params": {
-            "parameter": "value"
+            "parameter": value
         }
     }
 ]
-
-You cannot pick a new item until the previously picked item has been placed into the basket.
 """
 
-USER_PROMPT="""
-Task Description: {task_description}
 
-Scene Description: {scene_description}
+USER_PROMPT="""
+Task Description: 
+{task_description}
+
+Scene Description:
+{scene_description}
+
+History: 
+{history}
 
 Generate a sequence of skill calls and return nothing except the sequence in the specified format.
 """

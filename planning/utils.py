@@ -2,11 +2,12 @@ from typing import Any, Dict, List, Optional
 
 import base64
 import cv2
-from gymnasium import Env
 import numpy as np
 
+from dsynth.envs import DarkstoreContinuousBaseEnv
 
-def prepare_observations(env: Env, obs: Dict[str, Any]) -> Dict[str, Any]:
+
+def prepare_observations(env: DarkstoreContinuousBaseEnv, obs: Dict[str, Any]) -> Dict[str, Any]:
     camera_data = obs["sensor_data"]["right_base_camera_link"]
     image = camera_data["rgb"][0].cpu().numpy() [:, :, ::-1]
     segmentation = camera_data["segmentation"][0].cpu().numpy()[..., 0]
@@ -15,9 +16,7 @@ def prepare_observations(env: Env, obs: Dict[str, Any]) -> Dict[str, Any]:
     image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR) 
     segmentation = cv2.resize(segmentation, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
 
-    products = get_products(env)
-    scene_objects = extract_scene_objects(segmentation, products)
-    annotated_image = annotate_image(image, scene_objects)
+    annotated_image = annotate_image(image, segmentation, env)
 
     cv2.imwrite('outputs/original.png', image)
     cv2.imwrite('outputs/annotated.png', annotated_image)
@@ -25,7 +24,7 @@ def prepare_observations(env: Env, obs: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "image": image_to_base64(image),
         "annotated_image": image_to_base64(annotated_image),
-        "scene_objects": scene_objects,
+        "scene_description": prepare_scene_description(env),
     }
 
 
@@ -37,45 +36,62 @@ def image_to_base64(image: np.ndarray) -> Optional[str]:
     return base64.b64encode(encoded_bytes).decode("utf-8")
 
 
-def get_products(env: Env) -> Dict[int, str]:
-    return {
-        product.per_scene_id[0].item(): product.name
-        for product in env.unwrapped.actors["products"].values()
-    }
+def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> List[Dict[int, str]]:
+    scene_description = []
+
+    for product_id in extract_reachable_products(env):
+        actor_name = None
+        for actor in env.unwrapped.actors["products"].values():
+            if actor.per_scene_id[0].item() == product_id:
+                actor_name = actor.name
+                
+        product_name = None
+        for _, row in env.unwrapped.products_df.iterrows():
+            if row['actor_name'] == actor_name:
+                product_name = row['product_name']
+                break
+
+        scene_description.append(
+            {
+                "product_id": product_id,
+                "product_name": product_name,
+            }
+        )
+    return scene_description
 
 
-def extract_scene_objects(segmentation: np.ndarray, products: Dict[int, str]) -> List[Dict[str, Any]]:
-    scene_objects: List[Dict[str, Any]] = []
+def extract_reachable_products(env: DarkstoreContinuousBaseEnv) -> List[int]:
+    products: List[Dict[str, Any]] = []
 
+    for product in env.unwrapped.actors["products"].values():
+        if not product.name.endswith("0"):
+            continue
+        products.append(product.per_scene_id[0].item())
+
+    return products
+
+
+def build_bbox(segmentation: np.ndarray, product_id: int) -> List[int]:
+    mask = segmentation == product_id
+
+    if not mask.any():
+        return None
+    
     height, width = segmentation.shape
     padding = 3
 
-    for product_id, product_name in products.items():
-        if not product_name.endswith("0"):
-            continue
+    ys, xs = np.where(mask)
+    x_min = max(0, int(xs.min()) - padding)
+    y_min = max(0, int(ys.min()) - padding)
+    x_max = min(width - 1, int(xs.max()) + padding)
+    y_max = min(height - 1, int(ys.max()) + padding)
 
-        mask = segmentation == product_id
-        if not mask.any():
-            continue
-
-        ys, xs = np.where(mask)
-        xmin = max(0, int(xs.min()) - padding)
-        ymin = max(0, int(ys.min()) - padding)
-        xmax = min(width - 1, int(xs.max()) + padding)
-        ymax = min(height - 1, int(ys.max()) + padding)
-
-        scene_objects.append(
-            {
-                "bbox": [xmin, ymin, xmax, ymax],
-                "product_id": product_id,
-                "product_name": product_name.split("_", 1)[1].split(":")[0],
-            }
-        )
-
-    return scene_objects
+    return [x_min, y_min, x_max, y_max]
 
 
-def annotate_image(image: np.ndarray, scene_objects: List[Dict[str, Any]]) -> np.ndarray:
+def annotate_image(image: np.ndarray, segmentation: np.ndarray, env: DarkstoreContinuousBaseEnv) -> np.ndarray:
+    products = extract_reachable_products(env)
+    palette = build_palette(products)
     output = image.copy()
 
     font_face = cv2.FONT_HERSHEY_SIMPLEX
@@ -83,15 +99,13 @@ def annotate_image(image: np.ndarray, scene_objects: List[Dict[str, Any]]) -> np
     font_thickness = 1
     bg_color = (255, 255, 255)
 
-    palette = build_palette(scene_objects)
-
-    for obj in scene_objects:
-        x_min, y_min, x_max, y_max = obj["bbox"]
-        color = tuple(map(int, palette[obj["product_id"]]))
+    for product_id in products:
+        x_min, y_min, x_max, y_max = build_bbox(segmentation, product_id)
+        color = tuple(map(int, palette[product_id]))
 
         cv2.rectangle(output, (x_min, y_min), (x_max, y_max), color, 1)
 
-        label = str(obj["product_id"])
+        label = str(product_id)
         (label_width, label_height), baseline = cv2.getTextSize(label, font_face, font_scale, font_thickness)
         label_x, label_y = x_min, max(y_min, label_height)
 
@@ -101,8 +115,8 @@ def annotate_image(image: np.ndarray, scene_objects: List[Dict[str, Any]]) -> np
     return output
 
 
-def build_palette(scene_objects: List[Dict[str, Any]], seed: int = 42) -> np.ndarray:
-    max_product_id = max(obj["product_id"] for obj in scene_objects)
+def build_palette(product_ids: List[int], seed: int = 42) -> np.ndarray:
+    max_product_id = max(product_ids)
     palette_size = max(128, max_product_id + 1)
 
     rng = np.random.RandomState(seed)
