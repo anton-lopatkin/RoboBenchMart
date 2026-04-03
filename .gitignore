@@ -4,6 +4,7 @@ assets*/
 !conf/assets
 !dsynth/assets
 generated_envs
+demo_envs
 .ipynb_checkpoints
 .hydra
 .env
