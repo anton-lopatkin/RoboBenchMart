@@ -9,7 +9,7 @@ from mani_skill.utils.structs.pose import Pose
 
 @register_env('CollectOrderItemsContEnv', max_episode_steps=200000)
 class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
-    TARGET_PRODUCT_NAME = None
+    TARGET_PRODUCTS_NAMES = None
     ROBOT_INIT_POSE_RANDOM_ENABLED = True
 
     TARGET_POS_THRESH = 0.2
@@ -20,37 +20,33 @@ class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
         self.target_sizes = np.array([self.TARGET_POS_THRESH, self.TARGET_POS_THRESH, self.TARGET_POS_THRESH])
     
     def setup_target_objects(self, env_idxs):
-        self.target_product_names = {}
         self.target_products_df = None
         
         if self.markers_enabled:
             target_markers_iterator = {key: iter(val) for key, val in self.target_markers.items()}
 
-        self.target_product_names = {idx: self.TARGET_PRODUCT_NAME for idx in range(self.num_envs)}
-
         for scene_idx in env_idxs:
             scene_idx = scene_idx.cpu().item()
-            scene_prducts_df = self.products_df[self.products_df['scene_idx'] == scene_idx]
+            scene_products_df = self.products_df[self.products_df['scene_idx'] == scene_idx]
             
-            if self.TARGET_PRODUCT_NAME is None:
-                product_name = self._batched_episode_rng[scene_idx].choice(sorted(scene_prducts_df['product_name'].unique()))
-                self.target_product_names[scene_idx] = product_name
-        
-            else:
-                product_name = self.TARGET_PRODUCT_NAME
-                if not self.TARGET_PRODUCT_NAME in scene_prducts_df['product_name'].unique():
-                    raise RuntimeError(f"Product {self.TARGET_PRODUCT_NAME} is not present on scene #{scene_idx}")
-            
+            if self.TARGET_PRODUCTS_NAMES is None:
+                unique_products = sorted(scene_products_df['product_name'].unique())
+                self.TARGET_PRODUCTS_NAMES = self._batched_episode_rng[scene_idx].choice(unique_products, size=2, replace=False)
+
+            for product_name in self.TARGET_PRODUCTS_NAMES:
+                if not product_name in scene_products_df['product_name'].unique():
+                    raise RuntimeError(f"Product {product_name} is not present on scene #{scene_idx}")
+                
+            scene_target_products_df = scene_products_df[
+                scene_products_df['product_name'].isin(self.TARGET_PRODUCTS_NAMES)
+            ]
             if self.target_products_df is None:
-                self.target_products_df = scene_prducts_df[scene_prducts_df['product_name'] == product_name]
+                self.target_products_df = scene_target_products_df
             else:
-                self.target_products_df = pd.concat([self.target_products_df,
-                    scene_prducts_df[scene_prducts_df['product_name'] == product_name]
-                                                    ])
+                self.target_products_df = pd.concat([self.target_products_df, scene_target_products_df])
             
             if self.markers_enabled:
-                target_products = self.target_products_df[self.target_products_df['scene_idx'] == scene_idx]
-                for actor_name in target_products['actor_name']:
+                for actor_name in scene_target_products_df['actor_name']:
                     actor = self.actors['products'][actor_name]
                     try:
                         target_marker = next(target_markers_iterator[scene_idx])
@@ -104,24 +100,28 @@ class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
 
     def evaluate(self):
         target_pos = self.calc_target_pose().p 
-        # target_pos[:, 2] -= self.target_sizes[2] / 2
-        # tolerance = torch.tensor(self.target_sizes / 2, dtype=torch.float32).to(self.device)
         tolerance = torch.tensor([self.TARGET_POS_THRESH, self.TARGET_POS_THRESH, self.TARGET_POS_THRESH]).to(self.device)
         is_obj_placed = []
 
         for scene_idx in range(self.num_envs):
             scene_is_obj_placed = False
             scene_target_products_df = self.target_products_df[self.target_products_df['scene_idx'] == scene_idx]
-            for actor_name in scene_target_products_df['actor_name']:
+
+            scene_target_products = set(self.TARGET_PRODUCTS_NAMES)
+            scene_placed_products = set()
+
+            for _, row in scene_target_products_df.iterrows():
+                actor_name = row['actor_name']
                 target_product_pos = self.actors['products'][actor_name].pose.p
-                scene_is_obj_placed = torch.all(
+                scene_is_target_product_placed = torch.all(
                     (target_product_pos >= (target_pos[scene_idx] - tolerance)) & 
                     (target_product_pos <= (target_pos[scene_idx] + tolerance)),
                     dim=-1
                 )
-                if scene_is_obj_placed:
-                    break
-            
+                if scene_is_target_product_placed:
+                    product_name = row['product_name']
+                    scene_placed_products.add(product_name)
+            scene_is_obj_placed = torch.tensor([scene_placed_products == scene_target_products], device=self.device)
             is_obj_placed.append(scene_is_obj_placed)
 
         is_obj_placed = torch.cat(is_obj_placed)
@@ -155,33 +155,9 @@ class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
         return {
             "is_obj_placed" : is_obj_placed,
             "is_robot_static" : is_robot_static,
-            "is_non_target_produncts_displaced" : is_non_target_products_replaced,
+            "is_non_target_products_displaced" : is_non_target_products_replaced,
             "success": is_obj_placed & is_robot_static & (~is_non_target_products_replaced),
         }
-
-
-    def pick_item(self, item_id):
-        item = [
-            item for item in self.actors['products'].values()
-            if item.per_scene_id[0].item() == item_id
-        ][0]
-
-        item.set_pose(Pose.create_from_pq(p=self.agent.tcp_pos))
-        self.grasped_item_id = item_id
-
-
-    def place_to_basket(self):
-        item = [
-            item for item in self.actors['products'].values()
-            if item.per_scene_id[0].item() == self.grasped_item_id
-        ][0]
-        robot_pose = self.agent.base_link.pose
-        basket_shift = Pose.create_from_pq(p=[[0.3, 0.25, 0.14]])
-        basket = robot_pose * basket_shift 
-        item.set_pose(Pose.create_from_pq(p=basket.p))
-        self.grasped_item_id = None
-
-
 
     def calc_target_pose(self):
         robot_pose = self.agent.base_link.pose
@@ -192,7 +168,7 @@ class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
         self.language_instructions = []
         for scene_idx in env_idx:
             scene_idx = scene_idx.cpu().item()
-            self.language_instructions.append(f'prepare the ingredients for a latte')
+            self.language_instructions.append(self.LANGUAGE_INSTRUCTION)
 
     def _after_simulation_step(self):
         #does not work on gpu sim
@@ -208,4 +184,25 @@ class CollectOrderItemsContEnv(DarkstoreContinuousBaseEnv):
 
 @register_env('CollectOrderItemsContLatteEnv', max_episode_steps=200000)
 class CollectOrderItemsContLatteEnv(CollectOrderItemsContEnv):
-    TARGET_PRODUCTS_NAMES = ['Coffee', 'Milk']
+    LANGUAGE_INSTRUCTION = 'prepare the ingredients for a latte'
+
+    TARGET_PRODUCTS_NAMES = ['auchan milk', 'myboo coffee package']
+
+    # TARGET_PRODUCTS_NAMES = [
+    #     ['auchan milk', 'milk', 'plastic milk bottle'], 
+    #     ['myboo coffee package', 'paper coffee package', 'coffee package', 'capsules dolce gusto', 'nescafe']
+    # ]
+
+    # TARGET_PRODUCTS_NAMES = [
+    #     {
+    #         'candidates': ['auchan milk', 'milk', 'plastic milk bottle'],
+    #         'count': 1,
+    #         'required': True
+    #     },
+    #     {
+    #         'candidates': ['myboo coffee package', 'paper coffee package', 'coffee package', 'capsules dolce gusto', 'nescafe'],
+    #         'count': 1,
+    #         'required': True
+    #     }
+    # ]
+    
