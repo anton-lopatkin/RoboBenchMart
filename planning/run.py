@@ -29,32 +29,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def replan():
-    print("Enter new steps (one per line), empty line to finish.")
-    print("Format: skill_name key=value key=value")
-
-    new_steps = []
-
-    while True:
-        line = input(">>> ").strip()
-        if line == "":
-            break
-
-        parts = line.split()
-        skill_name = parts[0]
-
-        params = {}
-        for p in parts[1:]:
-            k, v = p.split("=")
-            params[k] = int(v) if v.isdigit() else float(v)
-
-        new_steps.append({
-            "name": skill_name,
-            "params": params
-        })
-
-    return new_steps
-
 
 def main(args):
     scene_dir = Path(args.scene_dir)
