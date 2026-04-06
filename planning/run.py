@@ -2,6 +2,7 @@ import argparse
 import gymnasium as gym
 from mani_skill.utils.wrappers import RecordEpisode
 import time
+import inspect
 
 import sys 
 sys.path.append('.')
@@ -73,22 +74,10 @@ def main(args):
     plan = planner.plan(language_instruction, observations)
     print(plan)
 
-    skills_map = {
-        'move_base_forward': controller.move_base_forward,
-        'rotate_base': controller.rotate_base,
-
-        'drive_to_shelf': controller.drive_to_shelf,
-        'drive_to_product': controller.drive_to_product,
-        'align_to_product': controller.align_to_product,
-        'move_base_towards_product': controller.move_base_towards_product,
-
-        'lift_ee': controller.lift_ee,
-
-        'move_ee_to_neutral_pose': controller.move_ee_to_neutral_pose,
-        'move_ee_to_product_height': controller.move_ee_to_product_height,
-
-        'grasp_product': controller.grasp_product,
-        'drop_to_basket': controller.drop_to_basket,
+    skills = {
+        name: method    
+        for name, method in inspect.getmembers(controller, predicate=inspect.ismethod)
+        if not name.startswith("_")
     }
 
     history = ""
@@ -107,7 +96,7 @@ def main(args):
             print(step_desription, end=' ')
             history += step_desription
 
-            skill_fn = skills_map.get(skill_name)
+            skill_fn = skills.get(skill_name)
             result = skill_fn(**skill_params)
 
             if result == -1:
