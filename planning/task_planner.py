@@ -5,12 +5,21 @@ import re
 import json
 
 from planning.prompts import SYSTEM_PROMPT, USER_PROMPT
+from planning.utils import build_skills_description
+from planning.controller import Controller
 
-
-class TaskPlanner():
+class TaskPlanner:
     def __init__(self, model: str, api_key: str, base_url: str):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
+        self.system_prompt = self.build_system_prompt()
+
+    def build_system_prompt(self) -> str:
+        skills_description = build_skills_description(Controller)
+        system_prompt = SYSTEM_PROMPT.format(
+            skills_description=skills_description
+        )
+        return system_prompt
 
     def build_user_prompt(self, language_instruction, observations: Dict[str, Any], history: str) -> List[Dict[str, str]]:
         user_prompt = USER_PROMPT.format(
@@ -36,7 +45,7 @@ class TaskPlanner():
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "user", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": self.system_prompt},
                         {"role": "user", "content": user_prompt}
                     ],
                     extra_body={"reasoning": {"enabled": True}}
@@ -53,5 +62,5 @@ class TaskPlanner():
 
         plan = re.search(r'(\[.*\])', answer, re.DOTALL).group(1)
         plan = json.loads(plan)
-        
+
         return plan

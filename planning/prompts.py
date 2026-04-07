@@ -13,52 +13,7 @@ You will receive the following input:
 
 Available Skills:
 
-1. 'move_base_forward(delta: float)'
-   - Moves the robot base forward or backward along its current facing direction.
-   - Positive values move forward, negative values move backward.
-   - Used for fine adjustments in positioning.
-
-2. 'rotate_base(delta: float)'
-   - Rotates the robot base around the vertical axis.
-   - Positive values rotate counterclockwise, negative values rotate clockwise.
-   - Used to change the viewing or approach direction.
-
-3. 'drive_to_shelf'
-   - Moves the robot to a predefined position in front of the shelf.
-   - Typically used as the first step to approach the workspace.
-
-4. 'drive_to_product(item_id: int)'
-   - Navigates the robot base to a position in front of the specified product.
-   - Stops at a safe distance for further alignment and manipulation.
-
-5. 'align_to_product(item_id: int)'
-   - Rotates the robot base so that it directly faces the target product.
-   - Improves grasping success by aligning the robot with the object.
-
-6. 'move_base_towards_product(item_id: int)'
-   - Moves the robot base closer to the product for grasping.
-   - Stops at a predefined close distance suitable for manipulation.
-
-7. 'lift_ee(delta: float)'
-   - Moves the end-effector vertically (along its local axis).
-   - Used for small height adjustments during manipulation.
-
-8. 'move_ee_to_neutral_pose'
-   - Moves the end-effector to a default neutral position relative to the robot base.
-   - Safe resting pose, useful between operations.
-
-9. 'move_ee_to_product_height(item_id: int)'
-   - Adjusts the height of the end-effector to match the height of the target product.
-   - Ensures proper vertical alignment before grasping.
-
-10. 'grasp_product(item_id: int)'
-    - Executes a grasping motion on the specified product.
-    - Automatically computes a suitable grasp pose based on object geometry.
-    - Closes the gripper and attaches the object to the robot.
-
-11. 'drop_to_basket'
-    - Moves the held object to the basket location and releases it.
-    - Opens the gripper to drop the object into the basket.
+{skills_description}
 
 Task Requirements:
 Based on the image and language inputs, generate a sequence of skill calls. 
