@@ -21,23 +21,36 @@ class TaskPlanner:
         )
         return system_prompt
 
-    def build_user_prompt(self, language_instruction, observations: Dict[str, Any], history: str) -> List[Dict[str, str]]:
+    def build_user_prompt(
+        self, language_instruction: str, observations: Dict[str, Any], history: str
+    ) -> List[Dict[str, str]]:
         user_prompt = USER_PROMPT.format(
             task_description=language_instruction,
-            scene_description=observations['scene_description'],
-            history=history
+            scene_description=observations["scene_description"],
+            history=history,
         )
 
-        print(user_prompt)
-        
         return [
             {"type": "text", "text": user_prompt},
-            {"type": "image_url", "image_url": f"data:image/png;base64,{observations['image']}"},
-            {"type": "image_url", "image_url": f"data:image/png;base64,{observations['annotated_image']}"},
+            {
+                "type": "image_url",
+                "image_url": f"data:image/png;base64,{observations['image']}",
+            },
+            {
+                "type": "image_url",
+                "image_url": f"data:image/png;base64,{observations['annotated_image']}",
+            },
         ]
 
-    def plan(self, language_instruction: str, observations: Dict[str, Any], history: Optional[str] = None) -> Optional[str]:
-        user_prompt = self.build_user_prompt(language_instruction, observations, history)
+    def plan(
+        self,
+        language_instruction: str,
+        observations: Dict[str, Any],
+        history: Optional[str] = None,
+    ) -> Optional[List[Dict[str, Any]]]:
+        user_prompt = self.build_user_prompt(
+            language_instruction, observations, history
+        )
         retries = 0
         max_retries = 5
         while retries < max_retries:
@@ -46,9 +59,9 @@ class TaskPlanner:
                     model=self.model,
                     messages=[
                         {"role": "user", "content": self.system_prompt},
-                        {"role": "user", "content": user_prompt}
+                        {"role": "user", "content": user_prompt},
                     ],
-                    extra_body={"reasoning": {"enabled": True}}
+                    extra_body={"reasoning": {"enabled": True}},
                 )
                 break
             except Exception as e:
@@ -60,7 +73,7 @@ class TaskPlanner:
 
         answer = response.choices[0].message.content
 
-        plan = re.search(r'(\[.*\])', answer, re.DOTALL).group(1)
+        plan = re.search(r"(\[.*\])", answer, re.DOTALL).group(1)
         plan = json.loads(plan)
 
         return plan
