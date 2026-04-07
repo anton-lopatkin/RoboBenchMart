@@ -30,29 +30,16 @@ Typical Execution Pattern (Example):
 To pick a product and place it into the basket, a typical sequence looks like:
 
 [
-    {"name": "drive_to_product", "params": {"item_id": 125}},
-    {"name": "align_to_product", "params": {"item_id": 125}},
-    {"name": "move_ee_to_product_height", "params": {"item_id": 125}},
-    {"name": "move_base_towards_product", "params": {"item_id": 125}},
-    {"name": "align_to_product", "params": {"item_id": 125}},
-    {"name": "grasp_product", "params": {"item_id": 125}},
-    {"name": "lift_ee", "params": {"delta": 0.05}},
-    {"name": "move_base_forward", "params": {"delta": -0.4}},
-    {"name": "drop_to_basket"},
-    {"name": "move_ee_to_neutral_pose"}
+    {{"name": "drive_to_product", "params": {{"item_id": 1, "distance": 1.2}}}},
+    {{"name": "align_to_product", "params": {{"item_id": 1}}}},
+    {{"name": "move_ee_to_pregrasp_pose", "params": {{"item_id": 1}}}},
+    {{"name": "move_base_forward", "params": {{"delta": 0.4}}}},
+    {{"name": "move_ee_to_grasp_pose", "params": {{"item_id": 1}}}},
+    {{"name": "grasp", "params": {{"item_id": 1}}}},
+    {{"name": "move_base_forward", "params": {{"delta": -0.4}}}},
+    {{"name": "move_ee_to_drop_pose"}},
+    {{"name": "release"}}
 ]
-
-Explanation of the pattern:
-- First navigate close to the product
-- Align the robot to face the product
-- Adjust end-effector height
-- Move closer for grasping
-- Align again for precision
-- Grasp the object
-- Lift slightly to avoid collisions
-- Move backward from the shelf
-- Drop the object into the basket
-- Reset the end-effector to a neutral pose before the next pick (if any)
 
 You may adapt this sequence depending on the task, but it is strongly recommended to follow this structure.
 
