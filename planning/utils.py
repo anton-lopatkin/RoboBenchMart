@@ -8,19 +8,23 @@ import numpy as np
 from dsynth.envs import DarkstoreContinuousBaseEnv
 
 
-def prepare_observations(env: DarkstoreContinuousBaseEnv, obs: Dict[str, Any]) -> Dict[str, Any]:
+def prepare_observations(
+    env: DarkstoreContinuousBaseEnv, obs: Dict[str, Any]
+) -> Dict[str, Any]:
     camera_data = obs["sensor_data"]["right_base_camera_link"]
-    image = camera_data["rgb"][0].cpu().numpy() [:, :, ::-1]
+    image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
     segmentation = camera_data["segmentation"][0].cpu().numpy()[..., 0]
 
     scale = 3
-    image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR) 
-    segmentation = cv2.resize(segmentation, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+    segmentation = cv2.resize(
+        segmentation, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
+    )
 
     annotated_image = annotate_image(image, segmentation, env)
 
-    cv2.imwrite('outputs/original.png', image)
-    cv2.imwrite('outputs/annotated.png', annotated_image)
+    cv2.imwrite("outputs/original.png", image)
+    cv2.imwrite("outputs/annotated.png", annotated_image)
 
     return {
         "image": image_to_base64(image),
@@ -45,11 +49,11 @@ def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> List[Dict[int,
         for actor in env.unwrapped.actors["products"].values():
             if actor.per_scene_id[0].item() == product_id:
                 actor_name = actor.name
-                
+
         product_name = None
         for _, row in env.unwrapped.products_df.iterrows():
-            if row['actor_name'] == actor_name:
-                product_name = row['product_name']
+            if row["actor_name"] == actor_name:
+                product_name = row["product_name"]
                 break
 
         scene_description.append(
@@ -72,12 +76,12 @@ def extract_reachable_products(env: DarkstoreContinuousBaseEnv) -> List[int]:
     return products
 
 
-def build_bbox(segmentation: np.ndarray, product_id: int) -> List[int]:
+def build_bbox(segmentation: np.ndarray, product_id: int) -> Optional[List[int]]:
     mask = segmentation == product_id
 
     if not mask.any():
         return None
-    
+
     height, width = segmentation.shape
     padding = 3
 
@@ -90,7 +94,9 @@ def build_bbox(segmentation: np.ndarray, product_id: int) -> List[int]:
     return [x_min, y_min, x_max, y_max]
 
 
-def annotate_image(image: np.ndarray, segmentation: np.ndarray, env: DarkstoreContinuousBaseEnv) -> np.ndarray:
+def annotate_image(
+    image: np.ndarray, segmentation: np.ndarray, env: DarkstoreContinuousBaseEnv
+) -> np.ndarray:
     products = extract_reachable_products(env)
     palette = build_palette(products)
     output = image.copy()
@@ -101,17 +107,38 @@ def annotate_image(image: np.ndarray, segmentation: np.ndarray, env: DarkstoreCo
     bg_color = (255, 255, 255)
 
     for product_id in products:
-        x_min, y_min, x_max, y_max = build_bbox(segmentation, product_id)
+        bbox = build_bbox(segmentation, product_id)
+        if bbox is None:
+            continue
+
+        x_min, y_min, x_max, y_max = bbox
         color = tuple(map(int, palette[product_id]))
 
         cv2.rectangle(output, (x_min, y_min), (x_max, y_max), color, 1)
 
         label = str(product_id)
-        (label_width, label_height), baseline = cv2.getTextSize(label, font_face, font_scale, font_thickness)
+        (label_width, label_height), baseline = cv2.getTextSize(
+            label, font_face, font_scale, font_thickness
+        )
         label_x, label_y = x_min, max(y_min, label_height)
 
-        cv2.rectangle(output, (label_x, label_y - label_height - baseline), (label_x + label_width, label_y - baseline), bg_color, -1)
-        cv2.putText(output, label, (label_x, label_y - baseline), font_face, font_scale, color, font_thickness, lineType=cv2.LINE_AA)
+        cv2.rectangle(
+            output,
+            (label_x, label_y - label_height - baseline),
+            (label_x + label_width, label_y - baseline),
+            bg_color,
+            -1,
+        )
+        cv2.putText(
+            output,
+            label,
+            (label_x, label_y - baseline),
+            font_face,
+            font_scale,
+            color,
+            font_thickness,
+            lineType=cv2.LINE_AA,
+        )
 
     return output
 
