@@ -1,7 +1,7 @@
-SYSTEM_PROMPT="""
+SYSTEM_PROMPT = """
 You will receive the following input:
 1. **Image input**: Two images
-   - The first image shows the original observation from the robot’s right shoulder camera.
+   - The first image shows the original observation from the robot's right shoulder camera.
    - The second image contains the same observation, with each object labeled with its numeric identifier and outlined by a bounding box.
 
 2. **Language input**:
@@ -22,7 +22,6 @@ Each skill call sequence should contain the skill name and the skill operation p
 Important Constraints:
 - You must pick and place one object at a time.
 - You cannot pick a new item until the previously picked item has been placed into the basket.
-- Always ensure proper alignment and positioning before grasping.
 - Always ensure proper alignment and positioning before grasping.
 - If the plan includes picking multiple products, you MUST move the end-effector to a neutral pose before starting the next pick.
 
@@ -70,30 +69,20 @@ Failure Handling Strategy:
 - Try adjusting the robot base position:
     - move slightly forward or backward using 'move_base_forward'
     - rotate using 'rotate_base'
-    - approach the product from a different angle (e.g., rotate first, then move_base_forward, then align_to_porduct and move_base_towards_product)
+    - approach the product from a different angle (e.g., rotate first, then move_base_forward, then align_to_product and move_base_towards_product)
     - then retry alignment or approach
 
 
 Output Format: 
 Generate a skill call sequence in the following structure:
 [
-    {
-        "name": "Skill Name 1",
-        "params": {
-            "parameter": value
-        }
-    },
-    {
-        "name": "Skill Name 2",
-        "params": {
-            "parameter": value
-        }
-    }
+    {{"name": "skill_name_1", "params": {{"parameter": value}}}},
+    {{"name": "skill_name_2", "params": {{"parameter": value}}}}
 ]
 """
 
 
-USER_PROMPT="""
+USER_PROMPT = """
 Task Description: 
 {task_description}
 
