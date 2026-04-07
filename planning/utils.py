@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 
 import base64
 import cv2
+import inspect
 import numpy as np
 
 from dsynth.envs import DarkstoreContinuousBaseEnv
@@ -124,3 +125,22 @@ def build_palette(product_ids: List[int], seed: int = 42) -> np.ndarray:
 
     return palette
 
+
+def build_skills_description(controller_cls) -> str:
+    skills = []
+    for name, method in inspect.getmembers(
+        controller_cls, predicate=inspect.isfunction
+    ):
+        if name.startswith("_"):
+            continue
+        sig = inspect.signature(method)
+        params = [
+            f"{n}: {p.annotation.__name__ if p.annotation is not inspect.Parameter.empty else 'Any'}"
+            for n, p in sig.parameters.items()
+            if n != "self"
+        ]
+        sig_str = f"{name}({', '.join(params)})"
+        doc = inspect.getdoc(method) or ""
+        lines = [f"  {line}" for line in doc.split("\n")]
+        skills.append(f"{len(skills) + 1}. '{sig_str}'\n" + "\n".join(lines))
+    return "\n\n".join(skills)
