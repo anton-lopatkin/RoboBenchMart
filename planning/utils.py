@@ -8,9 +8,7 @@ import numpy as np
 from dsynth.envs import DarkstoreContinuousBaseEnv
 
 
-def prepare_observations(
-    env: DarkstoreContinuousBaseEnv
-) -> Dict[str, Any]:
+def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     obs = env.base_env.get_obs()
     camera_data = obs["sensor_data"]["right_base_camera_link"]
     image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
@@ -42,32 +40,52 @@ def image_to_base64(image: np.ndarray) -> Optional[str]:
     return base64.b64encode(encoded_bytes).decode("utf-8")
 
 
-def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> List[Dict[int, str]]:
-    scene_description = []
+def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:    
+    return {
+        "robot": get_robot_description(env),
+        "shelf": get_shelf_description(env),
+        "products": get_products_description(env),
+    }
 
-    for product_id in extract_reachable_products(env):
-        actor_name = None
-        for actor in env.unwrapped.actors["products"].values():
-            if actor.per_scene_id[0].item() == product_id:
-                actor_name = actor.name
 
-        product_name = None
-        for _, row in env.unwrapped.products_df.iterrows():
-            if row["actor_name"] == actor_name:
-                product_name = row["product_name"]
-                break
+def get_robot_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
+    return {
+        "base_position": [round(float(x), 3) for x in env.unwrapped.agent.base_link.pose.sp.p],
+        "ee_position": [round(float(x), 3) for x in env.unwrapped.agent.tcp.pose.sp.p],
+    }
 
-        scene_description.append(
-            {
-                "product_id": product_id,
-                "product_name": product_name,
-            }
-        )
-    return scene_description
+
+def get_shelf_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
+    shelf_name = env.unwrapped.active_shelves[0][0]
+    shelf_pos = env.unwrapped.actors["fixtures"]["shelves"][shelf_name].pose.sp.p
+
+    return {
+        "position": [round(float(x), 3) for x in shelf_pos],
+    }
+
+
+def get_products_description(env: DarkstoreContinuousBaseEnv) -> List[Dict[str, Any]]:
+    actor_by_product_id = {
+        actor.per_scene_id[0].item(): actor
+        for actor in env.unwrapped.actors["products"].values()
+    }
+
+    product_name_by_actor_name = (
+        env.unwrapped.products_df.set_index("actor_name")["product_name"].to_dict()
+    )
+
+    return [
+        {
+            "product_id": product_id,
+            "product_name": product_name_by_actor_name.get(actor.name),
+        }
+        for product_id in extract_reachable_products(env)
+        if (actor := actor_by_product_id.get(product_id)) is not None
+    ]
 
 
 def extract_reachable_products(env: DarkstoreContinuousBaseEnv) -> List[int]:
-    products: List[Dict[str, Any]] = []
+    products: List[int] = []
 
     for product in env.unwrapped.actors["products"].values():
         if not product.name.endswith("0"):
