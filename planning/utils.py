@@ -9,8 +9,9 @@ from dsynth.envs import DarkstoreContinuousBaseEnv
 
 
 def prepare_observations(
-    env: DarkstoreContinuousBaseEnv, obs: Dict[str, Any]
+    env: DarkstoreContinuousBaseEnv
 ) -> Dict[str, Any]:
+    obs = env.base_env.get_obs()
     camera_data = obs["sensor_data"]["right_base_camera_link"]
     image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
     segmentation = camera_data["segmentation"][0].cpu().numpy()[..., 0]

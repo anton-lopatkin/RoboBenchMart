@@ -1,18 +1,19 @@
 import argparse
+import time
+from pathlib import Path
+
 import gymnasium as gym
 from mani_skill.utils.wrappers import RecordEpisode
-import time
-import inspect
 
 import sys 
 sys.path.append('.')
 from dsynth.envs import *
 from dsynth.robots import *
 
-from planning.task_planner import TaskPlanner
-from planning.controller import Controller
-from planning.utils import prepare_observations
 from planning.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+from planning.controller import Controller
+from planning.task_planner import TaskPlanner
+from planning.utils import prepare_observations
 
 
 def parse_args():
@@ -31,10 +32,44 @@ def parse_args():
     return args
 
 
+def execute_with_replanning(env, plan, controller, planner, language_instruction):
+    history = []
+    i = 0
+
+    while i < len(plan):
+        step = plan[i]
+        name = step["name"]
+        params = step.get("params") or {}
+        fn = getattr(controller, name, None)
+
+        if not callable(fn):
+            raise KeyError(f"Unknown skill '{name}' in plan step {i + 1}")
+
+        line = f"{i + 1}. {name}{f' {params}' if params else ''}"
+        print(line, end=" ")
+
+        result = fn(**params)
+        if result == -1:
+            print("[failure]")
+            history.append(f"{line} [failure]")
+            observations = prepare_observations(env)
+            replanned_steps = planner.plan(
+                language_instruction, observations, "\n".join(history)
+            )
+            if not replanned_steps:
+                break
+            plan = plan[:i] + replanned_steps
+            continue
+
+        print("[success]")
+        history.append(f"{line} [success]")
+        i += 1
+
+    return "\n".join(history)
+
+
 def main(args):
     scene_dir = Path(args.scene_dir)
-    out_dir = Path("outputs")
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     env = gym.make(
         args.env_id, 
@@ -48,7 +83,7 @@ def main(args):
         obs_mode="rgb+segmentation",
     )
 
-    model = "x-ai/grok-4.1-fast"
+    model = "nvidia/nemotron-nano-12b-v2-vl"
 
     new_traj_name = time.strftime("%Y%m%d_%H%M%S")
     video_path = scene_dir / f"./videos_seed={args.seed}_model={model.split('/')[1]}"
@@ -63,55 +98,26 @@ def main(args):
     print("Video path:", video_path)
     print("Trajectoty name:", new_traj_name)
 
-    obs, _ = env.reset(seed=args.seed, options={'reconfigure': True}) 
+    env.reset(seed=args.seed, options={"reconfigure": True})
 
     planner = TaskPlanner(model, OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
     controller = Controller(env, debug=args.debug, vis=args.vis)
 
-
     language_instruction = 'take one milk and one beer' # env.language_instructions[0]
-    observations = prepare_observations(env, obs)
-    plan = planner.plan(language_instruction, observations)
-    print(plan)
+    observations = prepare_observations(env)
 
-    skills = {
-        name: method    
-        for name, method in inspect.getmembers(controller, predicate=inspect.ismethod)
-        if not name.startswith("_")
-    }
+    plan = planner.plan(language_instruction, observations)
 
     history = ""
 
     if args.execute:
-        i = 0
-        while i < len(plan):
-            step = plan[i]
-            i += 1
-
-            skill_name = step.get("name")
-            skill_params = step.get("params", {})
-
-            step_desription = f"{i}. {skill_name} {skill_params}"
-
-            print(step_desription, end=' ')
-            history += step_desription
-
-            skill_fn = skills.get(skill_name)
-            result = skill_fn(**skill_params)
-
-            if result == -1:
-                status = "[failure]"
-                history += f" {status}\n"
-                new_steps = planner.plan(language_instruction, observations, history)
-                if not new_steps:
-                    break
-                plan = plan[:i] + new_steps
-                continue
-            else:
-                status = "[success]"
-                history += f" {status}\n"
-
-            print(status)
+        history = execute_with_replanning(
+            env=env,
+            plan=plan,
+            controller=controller,
+            planner=planner,
+            language_instruction=language_instruction,
+        )
 
     if args.vis:
         viewer = env.render_human()
