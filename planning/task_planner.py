@@ -13,6 +13,7 @@ class TaskPlanner:
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model
         self.system_prompt = self.build_system_prompt()
+        self.messages = [{"role": "user", "content": self.system_prompt}]
 
     def build_system_prompt(self) -> str:
         skills_description = build_skills_description(Controller)
@@ -51,16 +52,16 @@ class TaskPlanner:
         user_prompt = self.build_user_prompt(
             language_instruction, observations, history
         )
+        self.messages.append(
+            {"role": "user", "content": user_prompt}
+        )
         retries = 0
         max_retries = 5
         while retries < max_retries:
             try:
                 response = self.client.chat.completions.create(
                     model=self.model,
-                    messages=[
-                        {"role": "user", "content": self.system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
+                    messages=self.messages,
                     extra_body={"reasoning": {"enabled": True}},
                 )
                 break
@@ -71,7 +72,17 @@ class TaskPlanner:
             print("max retries reached")
             return None
 
-        answer = response.choices[0].message.content
+        response = response.choices[0].message
+
+        self.messages.append(
+            {
+                "role": "assistant",
+                "content": response.content,
+                "reasoning_details": response.reasoning_details
+            },
+        )
+
+        answer = response.content
 
         plan = re.search(r"(\[.*\])", answer, re.DOTALL).group(1)
         plan = json.loads(plan)
