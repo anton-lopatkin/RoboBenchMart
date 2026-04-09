@@ -50,8 +50,17 @@ def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]
 
 def get_robot_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     return {
-        "base_position": [round(float(x), 3) for x in env.unwrapped.agent.base_link.pose.sp.p],
-        "ee_position": [round(float(x), 3) for x in env.unwrapped.agent.tcp.pose.sp.p],
+        "base_position": [round(x, 3) for x in env.unwrapped.agent.base_link.pose.sp.p],
+        "ee_position": [round(x, 3) for x in env.unwrapped.agent.tcp.pose.sp.p],
+        "joints": [
+            {
+                "name": joint.name,
+                "qpos": round(joint.qpos.item(), 3),
+                "limits": [round(x, 3) for x in joint.limits[0].numpy()],
+            }   
+            for joint in env.unwrapped.agent.robot.active_joints
+            if not 'root' in joint.name
+        ]
     }
 
 
