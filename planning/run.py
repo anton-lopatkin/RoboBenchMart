@@ -26,7 +26,10 @@ def parse_args():
     parser.add_argument('--vis', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument("--execute", action='store_true', default=False)
-    parser.add_argument('--video', action='store_true', default=False)
+    parser.add_argument("--save-video", action="store_true", help="whether or not to save videos locally")
+    parser.add_argument("--save-traj", action="store_true", help="whether or not to save trajectory locally")
+    parser.add_argument("--history", action="store_true", default=False)
+    parser.add_argument("-m", "--model", type=str, default=False)
 
     args = parser.parse_args()
     return args
@@ -70,6 +73,7 @@ def execute_with_replanning(env, plan, controller, planner, language_instruction
 
 def main(args):
     scene_dir = Path(args.scene_dir)
+    output_dir = scene_dir / f"artifacts_model={args.model.split('/')[1]}" / time.strftime("%Y%m%d_%H%M%S")
 
     env = gym.make(
         args.env_id, 
@@ -83,24 +87,18 @@ def main(args):
         obs_mode="rgb+segmentation",
     )
 
-    model = "nvidia/nemotron-nano-12b-v2-vl"
-
-    new_traj_name = time.strftime("%Y%m%d_%H%M%S")
-    video_path = scene_dir / f"./videos_seed={args.seed}_model={model.split('/')[1]}"
-    env = RecordEpisode(
-        env,
-        output_dir=video_path,
-        trajectory_name=new_traj_name,
-        save_video=args.video,
-        video_fps=30,
-        avoid_overwriting_video=True
-    )
-    print("Video path:", video_path)
-    print("Trajectoty name:", new_traj_name)
+    if args.save_traj:
+        env = RecordEpisode(
+            env,
+            output_dir=output_dir,
+            save_video=args.save_video,
+            video_fps=30,
+            avoid_overwriting_video=True
+        )
 
     env.reset(seed=args.seed, options={"reconfigure": True})
 
-    planner = TaskPlanner(model, OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+    planner = TaskPlanner(args.model, OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
     controller = Controller(env, debug=args.debug, vis=args.vis)
 
     language_instruction = 'take one milk and one beer' # env.language_instructions[0]
@@ -130,11 +128,10 @@ def main(args):
 
     env.close()
 
-    history_file = video_path / f"{new_traj_name}_history.txt"
-    with open(history_file, "w") as f:
-        f.write(history)
-
-    print("History saved to:", history_file)
+    if args.history:
+        history_file = output_dir / "history.txt"
+        with open(history_file, "w") as f:
+            f.write(history)
 
 if __name__ == '__main__':
     main(parse_args())
