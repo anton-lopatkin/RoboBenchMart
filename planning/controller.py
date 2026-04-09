@@ -52,8 +52,10 @@ class Controller:
         """
         product_center = self._product_center(item_id)
         neutral_pose = self._base_pose * self.neutral_tcp_pose_wrt_to_base
-        target_pose = neutral_pose * sapien.Pose([0, 0, 0.2])
-        target_pose.p[2] = product_center[2]
+        aligned_pos = neutral_pose.p
+        aligned_pos[2] = product_center[2]
+        aligned_pose = sapien.Pose(p=aligned_pos, q=neutral_pose.q)
+        target_pose = aligned_pose * sapien.Pose([0, 0, 0.2])
         return self._run(
             self.solver.static_manipulation,
             target_tcp_pose=target_pose,
