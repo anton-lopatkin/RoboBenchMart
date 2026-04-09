@@ -1,3 +1,5 @@
+import io
+import contextlib
 import numpy as np
 import sapien
 from typing import Sequence
@@ -195,13 +197,26 @@ class Controller:
         direction[2] = 0.0
         return self._run(self.solver.rotate_base_z, new_direction=direction)
 
-
     def _run(self, fn, **kwargs):
-        result = fn(**kwargs)
-        if result == -1:
-            return result
-        self.solver.planner.update_from_simulation()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = fn(**kwargs)
+        stdout = self._remove_duplicates(out.getvalue())
+        self.last_stdout = stdout
+        if result != -1:
+            self.solver.planner.update_from_simulation()
         return result
+
+    def _remove_duplicates(self, text: str) -> str:
+        seen = set()
+        result = []
+
+        for line in text.splitlines():
+            if line not in seen:
+                seen.add(line)
+                result.append(line)
+
+        return "\n".join(result)
 
     @property
     def _base_pose(self):

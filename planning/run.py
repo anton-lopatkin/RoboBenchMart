@@ -53,8 +53,8 @@ def execute_with_replanning(env, plan, controller, planner, language_instruction
 
         result = fn(**params)
         if result == -1:
-            print("[failure]")
-            history.append(f"{line} [failure]")
+            print(f"[failure] \n{controller.last_stdout}")
+            history.append(f"{line} [failure] \n{controller.last_stdout}")
             observations = prepare_observations(env)
             replanned_steps = planner.plan(
                 language_instruction, observations, "\n".join(history)
