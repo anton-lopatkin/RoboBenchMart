@@ -59,7 +59,7 @@ class Controller:
         return self._run(
             self.solver.static_manipulation,
             target_tcp_pose=target_pose,
-            n_init_qpos=50,
+            n_init_qpos=100,
             disable_lift_joint=False,
         )
 
