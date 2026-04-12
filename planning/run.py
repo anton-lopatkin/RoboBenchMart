@@ -98,7 +98,7 @@ def main(args):
 
     env.reset(seed=args.seed, options={"reconfigure": True})
 
-    planner = TaskPlanner(args.model, OPENROUTER_API_KEY, OPENROUTER_BASE_URL)
+    planner = TaskPlanner(args.model)
     controller = Controller(env, debug=args.debug, vis=args.vis)
 
     language_instruction = 'take one milk and one beer' # env.language_instructions[0]
