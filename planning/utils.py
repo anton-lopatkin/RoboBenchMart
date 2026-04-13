@@ -40,7 +40,7 @@ def image_to_base64(image: np.ndarray) -> Optional[str]:
     return base64.b64encode(encoded_bytes).decode("utf-8")
 
 
-def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:    
+def prepare_scene_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     return {
         "robot": get_robot_description(env),
         "shelf": get_shelf_description(env),
@@ -57,10 +57,10 @@ def get_robot_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
                 "name": joint.name,
                 "qpos": round(joint.qpos.item(), 3),
                 "limits": [round(x, 3) for x in joint.limits[0].numpy()],
-            }   
+            }
             for joint in env.unwrapped.agent.robot.active_joints
-            if not 'root' in joint.name
-        ]
+            if not "root" in joint.name
+        ],
     }
 
 
@@ -181,6 +181,19 @@ def build_palette(product_ids: List[int], seed: int = 42) -> np.ndarray:
     return palette
 
 
+def get_function_description(name: str, function) -> str:
+    sig = inspect.signature(function)
+    params = [
+        f"{n}: {p.annotation.__name__ if p.annotation is not inspect.Parameter.empty else 'Any'}"
+        for n, p in sig.parameters.items()
+        if n != "self"
+    ]
+    sig_str = f"{name}({', '.join(params)})"
+    doc = inspect.getdoc(function) or ""
+    lines = [f"  {line}" for line in doc.split("\n")]
+    return f"'{sig_str}'\n" + "\n".join(lines)
+
+
 def build_skills_description(controller_cls) -> str:
     skills = []
     for name, method in inspect.getmembers(
@@ -188,14 +201,5 @@ def build_skills_description(controller_cls) -> str:
     ):
         if name.startswith("_"):
             continue
-        sig = inspect.signature(method)
-        params = [
-            f"{n}: {p.annotation.__name__ if p.annotation is not inspect.Parameter.empty else 'Any'}"
-            for n, p in sig.parameters.items()
-            if n != "self"
-        ]
-        sig_str = f"{name}({', '.join(params)})"
-        doc = inspect.getdoc(method) or ""
-        lines = [f"  {line}" for line in doc.split("\n")]
-        skills.append(f"{len(skills) + 1}. '{sig_str}'\n" + "\n".join(lines))
-    return "\n\n".join(skills)
+        skills.append(get_function_description(name, method))
+    return "\n\n".join(f"{i}. {s}" for i, s in enumerate(skills, start=1))

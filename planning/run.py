@@ -35,45 +35,71 @@ def parse_args():
     return args
 
 
-def execute_with_replanning(env, plan, controller, planner, language_instruction):
+def execute_with_replanning(env, planner, controller):
+    language_instruction = 'take one milk and one beer' # env.language_instructions[0]
+    observations = prepare_observations(env)
+
+    plan = planner.plan(language_instruction, observations)
+
     history = []
     i = 0
 
-    while i < len(plan):
-        step = plan[i]
-        name = step["name"]
-        params = step.get("params") or {}
-        fn = getattr(controller, name, None)
+    while i < len(plan.steps):
+        step = plan.steps[i]
+        fn = getattr(controller, step.name, None)
 
         if not callable(fn):
-            raise KeyError(f"Unknown skill '{name}' in plan step {i + 1}")
+            raise KeyError(f"Unknown skill '{step.name}' in plan step {i + 1}")
 
-        line = f"{i + 1}. {name}{f' {params}' if params else ''}"
+        line = f"{i + 1}. {step.name}{f' {step.params}' if step.params else ''}"
         print(line, end=" ")
 
-        result = fn(**params)
+        result = fn(**step.params)
         if result == -1:
-            print(f"[failure] \n{controller.last_stdout}")
-            history.append(f"{line} [failure] \n{controller.last_stdout}")
+            print(f"[motion planning failed] \n{controller.last_stdout}")
+            history.append(
+                f"{line} [motion planning failed] \n{controller.last_stdout}"
+            )
             observations = prepare_observations(env)
             replanned_steps = planner.plan(
                 language_instruction, observations, "\n".join(history)
             )
             if not replanned_steps:
                 break
-            plan = plan[:i] + replanned_steps
+            plan = plan[: i + 1] + replanned_steps
+            i += 1
             continue
 
-        print("[success]")
-        history.append(f"{line} [success]")
+        prev_observations = observations
+        observations = prepare_observations(env)
+
+        result = planner.assess(step, prev_observations, observations)
+
+        if result.success:
+            print("[success]")
+            history.append(f"{line} [success]")
+            i += 1
+            continue
+
+        print(f"[failure] {result.reason}")
+        history.append(f"{line} [failure] {result.reason}")
+
+        new_plan = planner.plan(
+            language_instruction, observations, "\n".join(history)
+        )
+        if not new_plan:
+            break
+        plan = plan.steps[: i + 1] + new_plan.steps
+
         i += 1
 
     return "\n".join(history)
 
 
 def main(args):
-    scene_dir = Path(args.scene_dir)
-    output_dir = scene_dir / f"artifacts_model={args.model.split('/')[1]}" / time.strftime("%Y%m%d_%H%M%S")
+    model_name = args.model.split('/')[-1]
+    output_dir = Path(f"{args.scene_dir}/artifacts_model={model_name}/{time.strftime('%Y%m%d_%H%M%S')}")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     env = gym.make(
         args.env_id, 
@@ -101,21 +127,11 @@ def main(args):
     planner = TaskPlanner(args.model)
     controller = Controller(env, debug=args.debug, vis=args.vis)
 
-    language_instruction = 'take one milk and one beer' # env.language_instructions[0]
-    observations = prepare_observations(env)
-
-    plan = planner.plan(language_instruction, observations)
-
-    history = ""
-
-    if args.execute:
-        history = execute_with_replanning(
-            env=env,
-            plan=plan,
-            controller=controller,
-            planner=planner,
-            language_instruction=language_instruction,
-        )
+    history = execute_with_replanning(
+        env=env,
+        planner=planner,
+        controller=controller,
+    )
 
     if args.vis:
         viewer = env.render_human()

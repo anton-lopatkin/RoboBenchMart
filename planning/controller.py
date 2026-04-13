@@ -125,10 +125,14 @@ class Controller:
         )
 
     def grasp(self, item_id: int):
-        """Close gripper to pick up a product.
+        """Close the gripper to grasp the target product.
 
-         Prerequisites:
+        Precondition:
         - End-effector must already be positioned at the grasp pose.
+
+        Effect:
+        - The gripper closes on the target object and attempts to secure it
+          between the fingers.
 
         Args:
             item_id (int): ID of the product to grasp.
