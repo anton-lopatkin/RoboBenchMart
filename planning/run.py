@@ -10,10 +10,8 @@ sys.path.append('.')
 from dsynth.envs import *
 from dsynth.robots import *
 
+from planning.evaluator import Evaluator
 from planning.config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL
-from planning.controller import Controller
-from planning.task_planner import TaskPlanner
-from planning.utils import prepare_observations
 
 
 def parse_args():
@@ -33,67 +31,6 @@ def parse_args():
 
     args = parser.parse_args()
     return args
-
-
-def execute_with_replanning(env, planner, controller):
-    language_instruction = 'take one milk and one beer' # env.language_instructions[0]
-    observations = prepare_observations(env)
-
-    plan = planner.plan(language_instruction, observations)
-
-    history = []
-    i = 0
-
-    while i < len(plan.steps):
-        step = plan.steps[i]
-        fn = getattr(controller, step.name, None)
-
-        if not callable(fn):
-            raise KeyError(f"Unknown skill '{step.name}' in plan step {i + 1}")
-
-        line = f"{i + 1}. {step.name}{f' {step.params}' if step.params else ''}"
-        print(line, end=" ")
-
-        result = fn(**step.params)
-        if result == -1:
-            print(f"[motion planning failed] \n{controller.last_stdout}")
-            history.append(
-                f"{line} [motion planning failed] \n{controller.last_stdout}"
-            )
-            observations = prepare_observations(env)
-            replanned_steps = planner.plan(
-                language_instruction, observations, "\n".join(history)
-            )
-            if not replanned_steps:
-                break
-            plan = plan[: i + 1] + replanned_steps
-            i += 1
-            continue
-
-        prev_observations = observations
-        observations = prepare_observations(env)
-
-        result = planner.assess(step, prev_observations, observations)
-
-        if result.success:
-            print("[success]")
-            history.append(f"{line} [success]")
-            i += 1
-            continue
-
-        print(f"[failure] {result.reason}")
-        history.append(f"{line} [failure] {result.reason}")
-
-        new_plan = planner.plan(
-            language_instruction, observations, "\n".join(history)
-        )
-        if not new_plan:
-            break
-        plan = plan.steps[: i + 1] + new_plan.steps
-
-        i += 1
-
-    return "\n".join(history)
 
 
 def main(args):
@@ -124,14 +61,8 @@ def main(args):
 
     env.reset(seed=args.seed, options={"reconfigure": True})
 
-    planner = TaskPlanner(args.model)
-    controller = Controller(env, debug=args.debug, vis=args.vis)
-
-    history = execute_with_replanning(
-        env=env,
-        planner=planner,
-        controller=controller,
-    )
+    evaluator = Evaluator(args.debug, args.vis)
+    history = evaluator.run_episode(args.model, env)
 
     if args.vis:
         viewer = env.render_human()
