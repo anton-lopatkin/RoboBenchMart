@@ -56,8 +56,14 @@ Failure Handling Strategy:
     - rotate using 'rotate_base'
     - approach the product from a different angle (e.g., rotate first, then move_base_forward, then align_to_product and move_base_towards_product)
     - then retry alignment or approach
-"""
 
+
+Output Format: 
+[
+    {{"name": "skill_name_1", "params": {{"parameter": value}}}},
+    {{"name": "skill_name_2", "params": {{"parameter": value}}}}
+]
+"""
 
 PLANNER_USER_PROMPT = """
 Task Description: 
@@ -96,6 +102,9 @@ Evaluation Guidelines:
 - For movement: check if robot base/end-effector moved to the target position
 - For release: check if the object was released (object fell or is no longer attached)
 - For drive operations: verify robot moved closer/further from target
+
+Output Format: 
+{"success": True/False, "reason": "Brief explanation of why the step succeeded or failed"}
 """
 
 ASSESSOR_USER_PROMPT = """

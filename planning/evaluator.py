@@ -20,17 +20,19 @@ class Evaluator:
         history = []
         i = 0
 
-        while i < len(plan.steps):
-            step = plan.steps[i]
-            fn = getattr(controller, step.name, None)
+        while i < len(plan):
+            step = plan[i]
+            name = step["name"]
+            params = step.get("params") or {}
+            fn = getattr(controller, name, None)
 
             if not callable(fn):
-                raise KeyError(f"Unknown skill '{step.name}' in plan step {i + 1}")
+                raise KeyError(f"Unknown skill '{name}' in plan step {i + 1}")
 
-            line = f"{i + 1}. {step.name}{f' {step.params}' if step.params else ''}"
+            line = f"{i + 1}. {name}{f' {params}' if params else ''}"
             print(line)
 
-            result = fn(**step.params)
+            result = fn(**params)
             if result == -1:
                 history.append(
                     f"{line} [motion planning failed] \n{controller.last_stdout}"
@@ -50,19 +52,19 @@ class Evaluator:
 
             result = task_planner.assess(step, prev_observations, observations)
 
-            if result.success:
+            if result["success"]:
                 history.append(f"{line} [success]")
                 i += 1
                 continue
 
-            history.append(f"{line} [failure] {result.reason}")
+            history.append(f"{line} [failure] {result.get('reason')}")
 
-            new_plan = task_planner.plan(
+            replanned_steps = task_planner.plan(
                 language_instruction, observations, "\n".join(history)
             )
-            if not new_plan:
+            if not replanned_steps:
                 break
-            plan = plan.steps[: i + 1] + new_plan.steps
+            plan = plan[: i + 1] + replanned_steps
 
             i += 1
 

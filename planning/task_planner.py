@@ -1,9 +1,10 @@
+import json
+import re
 from typing import Any, Dict, List, Optional
 import time
 
 from langchain_openrouter import ChatOpenRouter
 from langchain.messages import SystemMessage, HumanMessage
-from pydantic import BaseModel, Field
 
 from planning.prompts import (
     PLANNER_SYSTEM_PROMPT,
@@ -15,41 +16,19 @@ from planning.utils import build_skills_description, get_function_description
 from planning.controller import Controller
 
 
-class Step(BaseModel):
-    name: str = Field(description="Name of the skill to call")
-    params: Dict[str, Any] = Field(
-        default_factory=dict, description="Parameters for the skill"
-    )
-
-
-class Plan(BaseModel):
-    steps: List[Step] = Field(description="Sequence of skills to call")
-
-    
-class AssessmentResult(BaseModel):
-    success: bool = Field(
-        description="Whether the skill execution achieved its intended goal"
-    )
-    reason: str = Field(
-        description="Brief explanation of why the step succeeded or failed"
-    )
-
-
 class TaskPlanner:
     def __init__(self, model: str):
-        self.model = ChatOpenRouter(model=model, reasoning={"enable": False})
-        self.planner = self.model.with_structured_output(Plan, method="json_schema", strict=True)
-        self.assessor = self.model.with_structured_output(AssessmentResult, method="json_schema", strict=True)
+        self.model = ChatOpenRouter(model=model)
 
     def plan(
         self,
         instruction: str,
         obs: Dict[str, Any],
         history: Optional[str] = None,
-    ) -> Plan:
+    ) -> List[Dict[str, Any]]:
         start = time.time()
         print("[planner] thinking...")
-        result = self.planner.invoke(
+        result = self.model.invoke(
             [
                 self._build_planner_system_message(),
                 self._build_planner_human_message(instruction, obs, history or ""),
@@ -57,7 +36,11 @@ class TaskPlanner:
         )
         elapsed = time.time() - start
         print(f"[planner] thought for {elapsed:.1f}s")
-        return result
+
+        plan = re.search(r"(\[.*\])", result.content, re.DOTALL).group(1)
+        plan = json.loads(plan)
+
+        return plan
 
 
     def assess(
@@ -65,21 +48,25 @@ class TaskPlanner:
         step: Dict[str, Any],
         before_obs: Dict[str, Any],
         after_obs: Dict[str, Any],
-    ) -> AssessmentResult:
+    ) -> Dict[str, Any]:
         start = time.time()
         print("[assessor] thinking...")
-        result = self.assessor.invoke(
+        result = self.model.invoke(
             [
                 SystemMessage(ASSESSOR_SYSTEM_PROMPT),
                 self._build_assessor_human_message(step, before_obs, after_obs),
             ]
         )
+
+        result = re.search(r"(\{.*\})", result.content, re.DOTALL).group()
+        result = json.loads(result)
+
         elapsed = time.time() - start
         print(f"[assessor] thought for {elapsed:.1f}s")
-        if result.success:
+        if result["success"]:
             print(f"[assessor] step succeed")
         else:
-            print(f"[assessor] step failed (reason: {result.reason})")
+            print(f"[assessor] step failed (reason: {result.get('reason')})")
 
         return result
 
@@ -121,12 +108,14 @@ class TaskPlanner:
         before_obs: Dict[str, Any],
         after_obs: Dict[str, Any],
     ) -> HumanMessage:
-        skill_fn = getattr(Controller, step.name, None)
-        skill_description = get_function_description(step.name, skill_fn)
+        name = step["name"]
+        params = step.get("params") or {}
+        skill_fn = getattr(Controller, name, None)
+        skill_description = get_function_description(name, skill_fn)
 
         user_prompt = ASSESSOR_USER_PROMPT.format(
-            skill_name=step.name,
-            skill_params=str(step.params),
+            skill_name=name,
+            skill_params=str(params),
             skill_description=skill_description,
             scene_before=before_obs["scene_description"],
             scene_after=after_obs["scene_description"],
