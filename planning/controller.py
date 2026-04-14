@@ -2,6 +2,7 @@ import io
 import contextlib
 import numpy as np
 import sapien
+import time
 from typing import Sequence
 from mani_skill.utils import common
 from mani_skill.examples.motionplanning.base_motionplanner import utils as maniskill_mp_utils
@@ -204,13 +205,20 @@ class Controller:
         return self._run(self.solver.rotate_base_z, new_direction=direction)
 
     def _run(self, fn, **kwargs):
+        start = time.time()
+        print(f"[controller] running...")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             result = fn(**kwargs)
         stdout = self._remove_duplicates(out.getvalue())
         self.last_stdout = stdout
-        if result != -1:
-            self.solver.planner.update_from_simulation()
+        elapsed = time.time() - start
+        print(f"[controller] finished ({elapsed:.1f}s)")
+        if result == -1:
+            print(f"[controller] motion planning failed")
+            return result
+        print(f"[controller] motion planning succeed")
+        self.solver.planner.update_from_simulation()
         return result
 
     def _remove_duplicates(self, text: str) -> str:

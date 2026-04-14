@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+import time
 
 from langchain_openrouter import ChatOpenRouter
 from langchain.messages import SystemMessage, HumanMessage
@@ -36,7 +37,7 @@ class AssessmentResult(BaseModel):
 
 class TaskPlanner:
     def __init__(self, model: str):
-        self.model = ChatOpenRouter(model=model)
+        self.model = ChatOpenRouter(model=model, reasoning={"enable": False})
         self.planner = self.model.with_structured_output(Plan, method="json_schema", strict=True)
         self.assessor = self.model.with_structured_output(AssessmentResult, method="json_schema", strict=True)
 
@@ -46,12 +47,18 @@ class TaskPlanner:
         obs: Dict[str, Any],
         history: Optional[str] = None,
     ) -> Plan:
-        return self.planner.invoke(
+        start = time.time()
+        print("[planner] thinking...")
+        result = self.planner.invoke(
             [
                 self._build_planner_system_message(),
                 self._build_planner_human_message(instruction, obs, history or ""),
             ]
         )
+        elapsed = time.time() - start
+        print(f"[planner] thought for {elapsed:.1f}s")
+        return result
+
 
     def assess(
         self,
@@ -59,12 +66,22 @@ class TaskPlanner:
         before_obs: Dict[str, Any],
         after_obs: Dict[str, Any],
     ) -> AssessmentResult:
-        return self.assessor.invoke(
+        start = time.time()
+        print("[assessor] thinking...")
+        result = self.assessor.invoke(
             [
                 SystemMessage(ASSESSOR_SYSTEM_PROMPT),
                 self._build_assessor_human_message(step, before_obs, after_obs),
             ]
         )
+        elapsed = time.time() - start
+        print(f"[assessor] thought for {elapsed:.1f}s")
+        if result.success:
+            print(f"[assessor] step succeed")
+        else:
+            print(f"[assessor] step failed (reason: {result.reason})")
+
+        return result
 
     def _build_planner_system_message(self) -> SystemMessage:
         skills_description = build_skills_description(Controller)

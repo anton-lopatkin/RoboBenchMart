@@ -28,11 +28,10 @@ class Evaluator:
                 raise KeyError(f"Unknown skill '{step.name}' in plan step {i + 1}")
 
             line = f"{i + 1}. {step.name}{f' {step.params}' if step.params else ''}"
-            print(line, end=" ")
+            print(line)
 
             result = fn(**step.params)
             if result == -1:
-                print(f"[motion planning failed] \n{controller.last_stdout}")
                 history.append(
                     f"{line} [motion planning failed] \n{controller.last_stdout}"
                 )
@@ -52,12 +51,10 @@ class Evaluator:
             result = task_planner.assess(step, prev_observations, observations)
 
             if result.success:
-                print("[success]")
                 history.append(f"{line} [success]")
                 i += 1
                 continue
 
-            print(f"[failure] {result.reason}")
             history.append(f"{line} [failure] {result.reason}")
 
             new_plan = task_planner.plan(
