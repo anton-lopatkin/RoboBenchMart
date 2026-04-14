@@ -33,7 +33,15 @@ class Controller:
         )
 
     def move_ee_to_neutral_pose(self):
-        """Move end-effector to a neutral pose"""
+        """Move end-effector to a neutral pose.
+        
+        Effect:
+        - End-effector moves to a predefined neutral pose in front of the robot's
+          body (arm is retracted, gripper is roughly at chest height, facing 
+          forward).
+        - Gripper remains in its current open/closed state.
+        - Robot base unchanged.
+        """
         target_pose = self._base_pose * self.neutral_tcp_pose_wrt_to_base
         return self._run(
             self.solver.static_manipulation,
@@ -46,8 +54,13 @@ class Controller:
     def move_ee_to_pregrasp_pose(self, item_id: int):
         """Move end-effector to an approach position near the product.
 
-        Positions the end-effector at the product's height and slightly forward. 
-
+        Effect:
+        - End-effector moves to an approach position near the target product,
+          aligned exactly with its height and slightly forward (pre-grasp 
+          standoff).
+        - Gripper remains in its current open/closed state.
+        - Robot base unchanged.
+        
         Args:
             item_id (int): ID of the product to align with.
         """
@@ -68,8 +81,13 @@ class Controller:
     def move_ee_to_grasp_pose(self, item_id: int):
         """Move end-effector to the grasp pose for an item.
 
-        Prerequisites:
+        Preconditions:
         - Use move_ee_to_pregrasp_pose first to get into a good starting position.
+
+        Effect:
+        - End-effector moves precisely to the computed grasp pose around the target
+          product; fingers remain fully open and aligned for closing.
+        - Robot base unchanged.
 
         Args:
             item_id (int): ID of the product to grasp.
@@ -90,7 +108,13 @@ class Controller:
         )
 
     def move_ee_to_drop_pose(self):
-        """Move end-effector to a drop pose above the robot's basket"""
+        """Move end-effector to a drop pose above the robot's basket.
+        
+        Effect:
+        - End-effector moves to a drop pose directly above the robot's basket;
+          gripper is positioned low over the basket opening, ready to release.
+        - Robot base unchanged.
+        """
         goal_center = self.env.calc_target_pose().sp.p
         goal_approaching = np.array([0, 0.0, -1.0])
         goal_closing = -self._base_pose.to_transformation_matrix()[:3, 1]
@@ -110,6 +134,16 @@ class Controller:
     def move_ee_by(self, delta: Sequence[float]):
         """Move end-effector by a relative offset.
 
+        Effect:
+        - End-effector performs a pure translation by the relative offset [dx, dy, dz]
+          in its local coordinate frame:
+            - X-axis: up (+) / down (−)
+            - Y-axis: left (−) / right (+)
+            - Z-axis: forward (+) / backward (−)
+        - Gripper orientation does not change.
+        - Fingers stay in their current open/closed state.
+        - Robot base unchanged.
+
         Args:
             delta (Sequence[float]): Relative offset [dx, dy, dz] in meters in 
                 end-effector frame:
@@ -128,12 +162,12 @@ class Controller:
     def grasp(self, item_id: int):
         """Close the gripper to grasp the target product.
 
-        Precondition:
+        Preconditions:
         - End-effector must already be positioned at the grasp pose.
 
         Effect:
-        - The gripper closes on the target object and attempts to secure it
-          between the fingers.
+        - Gripper fingers close around the target product and secure it.
+        - Robot base and arm pose unchanged.
 
         Args:
             item_id (int): ID of the product to grasp.
@@ -149,11 +183,25 @@ class Controller:
         return result
 
     def release(self):
-        """Open gripper to release the currently held item."""
+        """Open gripper to release the currently held item.
+        
+        Effect:
+        - Gripper fingers open fully to their maximum width.
+        - Any previously held product is detached from the gripper and becomes
+          free (visually the product separates from the fingers and may fall
+          or stay supported by the environment).
+        - Robot base, arm pose and end-effector position unchanged.
+        """
         return self._run(self.solver.open_gripper)
 
     def drive_to_shelf(self, distance: float):
         """Drive the robot base to approach the center of the active shelf.
+
+        Effect:
+        - Robot base translates to a position directly in front of the active
+          shelf, stopping at the exact specified distance from its center.
+        - Base orientation can be any.
+        - Arm and gripper state unchanged (relative to base).
 
         Args:
             distance (float): Distance in meters to stop from the shelf
@@ -165,6 +213,12 @@ class Controller:
 
     def drive_to_product(self, item_id: int, distance: float):
         """Drive the robot base toward a specific product.
+
+        Effect:
+        - Robot base translates to a position at the specified distance directly
+          in front of the target product.
+        - Base orientation can be any.
+        - Arm and gripper state unchanged (relative to base).
 
         Args:
             item_id (int): ID of the product to drive toward.
@@ -179,6 +233,11 @@ class Controller:
     def move_base_forward(self, delta: float):
         """Move the robot base forward or backward by a delta distance.
 
+        Effect:
+        - Robot base performs a pure translation forward (positive delta) or
+          backward (negative delta) along its current heading by the given distance.
+        - Base orientation, arm and gripper state unchanged.
+
         Args:
             delta (float): Distance in meters. Positive moves forward, negative moves
                 backward.
@@ -187,6 +246,11 @@ class Controller:
 
     def rotate_base(self, delta: float):
         """Rotate the robot base around its Z axis.
+
+        Effect:
+        - Robot base rotates in place around its vertical (Z) axis by the
+          specified angle (positive = counterclockwise, negative = clockwise).
+        - Arm and gripper state unchanged (relative to base).
 
         Args:
             delta (float): Rotation angle in radians. Positive is counterclockwise,
@@ -197,6 +261,10 @@ class Controller:
     def align_to_product(self, item_id: int):
         """Rotate the robot base to face a product.
 
+        Effect:
+        - Robot base rotates in place so that its forward direction points directly
+          toward the target product (on the horizontal plane).
+        - Arm and gripper state unchanged (relative to base).
         Args:
             item_id (int): ID of the product to align toward.
         """
