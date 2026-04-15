@@ -13,6 +13,49 @@ from mani_skill.agents.base_agent import BaseAgent
 from dsynth import PACKAGE_DIR
 
 @register_agent()
+class DSFetchBasket2(Fetch):
+    uid = "ds_fetch_basket2"
+    urdf_path = f"{PACKAGE_DIR}/assets/urdf/fetch/fetch_basket.urdf"
+    urdf_arm_ik_path = f"{PACKAGE_DIR}/assets/urdf/fetch/fetch_torso_up.urdf"
+
+    @property
+    def _sensor_configs(self):
+        return [
+            CameraConfig(
+                uid="fetch_hand",
+                pose=Pose.create_from_pq([0.1, 0, -0.1], euler.euler2quat(np.pi, -np.pi / 2, 0)),
+                width=128,
+                height=128,
+                fov=2,
+                near=0.01,
+                far=100,
+                entity_uid="gripper_link",
+            ),
+            CameraConfig(
+                uid="left_base_camera_link",
+                pose=Pose.create_from_pq([-0.5, 0.5, 0], euler.euler2quat(0, 0.3, -0.2)),
+                width=256,
+                height=256,
+                fov=1.5,
+                near=0.01,
+                far=100,
+                entity_uid="head_camera_link",
+            ),
+            CameraConfig(
+                uid="right_base_camera_link",
+                pose=Pose.create_from_pq([-0.5, -0.5, 0], euler.euler2quat(0, 0.3, 0.2)),
+                width=256,
+                height=256,
+                fov=1.5,
+                near=0.01,
+                far=100,
+                entity_uid="head_camera_link",
+            ),
+        ]
+
+    
+
+@register_agent()
 class DSFetch(Fetch):
     uid = "ds_fetch"
     urdf_path = f"{PACKAGE_DIR}/assets/urdf/fetch/fetch.urdf"
