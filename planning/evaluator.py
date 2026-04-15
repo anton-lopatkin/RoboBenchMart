@@ -38,7 +38,7 @@ class Evaluator:
                     f"{line} [motion planning failed] \n{controller.last_stdout}"
                 )
                 observations = prepare_observations(env)
-                replanned_steps = task_planner.plan(
+                replanned_steps = task_planner.replan(
                     language_instruction, observations, "\n".join(history)
                 )
                 if not replanned_steps:
@@ -59,7 +59,7 @@ class Evaluator:
 
             history.append(f"{line} [failure] {result.get('reason')}")
 
-            replanned_steps = task_planner.plan(
+            replanned_steps = task_planner.replan(
                 language_instruction, observations, "\n".join(history)
             )
             if not replanned_steps:
