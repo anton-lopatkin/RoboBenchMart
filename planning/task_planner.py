@@ -1,10 +1,12 @@
+import base64
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 import time
 
 from langchain_openrouter import ChatOpenRouter
-from langchain.messages import SystemMessage, HumanMessage
+from langchain.messages import AIMessage, HumanMessage, SystemMessage
 
 from planning.prompts import (
     PLANNER_SYSTEM_PROMPT,
@@ -40,7 +42,7 @@ class TaskPlanner:
             answer = self.model.invoke(messages)
             try:
                 plan = self._parse_plan(answer)
-                self.conversation.append([messages, answer])
+                self.conversation += messages + [answer]
                 elapsed = time.time() - start
                 print(f"[planner] thought for {elapsed:.1f}s")
                 return plan
@@ -68,7 +70,7 @@ class TaskPlanner:
             answer = self.model.invoke(messages)
             try:
                 result = self._parse_assessment_result(answer)
-                self.conversation.append([messages, answer])
+                self.conversation += messages + [answer]
                 elapsed = time.time() - start
                 print(f"[assessor] thought for {elapsed:.1f}s")
                 if result["success"]:
@@ -100,7 +102,7 @@ class TaskPlanner:
             answer = self.model.invoke(messages)
             try:
                 plan = self._parse_plan(answer)
-                self.conversation.append([messages, answer])
+                self.conversation += messages + [answer]
                 elapsed = time.time() - start
                 print(f"[replanner] thought for {elapsed:.1f}s")
                 return plan
@@ -159,7 +161,7 @@ class TaskPlanner:
         )
         return HumanMessage(
             content=[
-                {"type": "text", "text": "BEFORE execution:"},
+                {"type": "text", "text": user_prompt},
                 {
                     "type": "image",
                     "base64": before_obs["image"],
@@ -170,7 +172,6 @@ class TaskPlanner:
                     "base64": before_obs["annotated_image"],
                     "mime_type": "image/png",
                 },
-                {"type": "text", "text": "AFTER execution:"},
                 {
                     "type": "image",
                     "base64": after_obs["image"],
@@ -181,7 +182,6 @@ class TaskPlanner:
                     "base64": after_obs["annotated_image"],
                     "mime_type": "image/png",
                 },
-                {"type": "text", "text": user_prompt},
             ]
         )
 
@@ -229,3 +229,65 @@ class TaskPlanner:
             raise ValueError(f"No JSON object found in response")
         result = json.loads(match.group())
         return result
+
+    def save_conversation(self, output_dir: str):
+        images_dir = os.path.join(output_dir, "images")
+        os.makedirs(images_dir, exist_ok=True)
+
+        saved = []
+        img_counter = 0
+
+        for msg in self.conversation:
+            if isinstance(msg, SystemMessage):
+                role = "system"
+            elif isinstance(msg, HumanMessage):
+                role = "human"
+            elif isinstance(msg, AIMessage):
+                role = "ai"
+            else:
+                role = "unknown"
+
+            saved.append({"role": role, "text": msg.text})
+
+            content = msg.content
+
+            if isinstance(msg, AIMessage):
+                reasoning_content = msg.additional_kwargs.get("reasoning_content")
+                if reasoning_content:
+                    saved[-1]["reasoning"] = reasoning_content
+
+            if isinstance(content, list):
+                images = []
+                for part in content:
+                    if part.get("type") == "image":
+                        img_data = base64.b64decode(part.get("base64"))
+                        img_name = f"{img_counter}.png"
+                        img_path = os.path.join(images_dir, img_name)
+                        with open(img_path, "wb") as f:
+                            f.write(img_data)
+                        images.append(f"images/{img_name}")
+                        img_counter += 1
+
+                saved[-1]["images"] = images
+
+        json_path = os.path.join(output_dir, "conversation.json")
+        with open(json_path, "w") as f:
+            json.dump({"messages": saved}, f, indent=2, ensure_ascii=False)
+
+        txt_lines = []
+        for i, msg in enumerate(saved):
+            role = msg.get("role", "unknown")
+            txt_lines.append(f"[{i}] {role.upper()}")
+            if msg.get("reasoning"):
+                txt_lines.append(f"Reasoning: {msg['reasoning']}")
+            if role == "ai":
+                txt_lines.append(f"Answer: {msg.get('text', '')}")
+            else:
+                txt_lines.append(msg.get("text", ""))
+            if msg.get("images"):
+                txt_lines.append(f"Images: {', '.join(msg['images'])}")
+            txt_lines.append("")
+
+        txt_path = os.path.join(output_dir, "conversation.txt")
+        with open(txt_path, "w") as f:
+            f.write("\n".join(txt_lines))
