@@ -21,76 +21,94 @@ from planning.controller import Controller
 class TaskPlanner:
     def __init__(self, model: str):
         self.model = ChatOpenRouter(model=model)
+        self.conversation = []
 
     def plan(
         self,
         instruction: str,
         obs: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+    ) -> Optional[List[Dict[str, Any]]]:
         start = time.time()
         print("[planner] thinking...")
-        result = self.model.invoke(
-            [
-                self._build_planner_system_message(),
-                self._build_planner_human_message(instruction, obs),
-            ]
-        )
-        elapsed = time.time() - start
-        print(f"[planner] thought for {elapsed:.1f}s")
 
-        plan = re.search(r"(\[.*\])", result.content, re.DOTALL).group(1)
-        plan = json.loads(plan)
+        messages = [
+            self._build_planner_system_message(),
+            self._build_planner_human_message(instruction, obs),
+        ]
 
-        return plan
+        for attempt in range(2):
+            answer = self.model.invoke(messages)
+            try:
+                plan = self._parse_plan(answer)
+                self.conversation.append([messages, answer])
+                elapsed = time.time() - start
+                print(f"[planner] thought for {elapsed:.1f}s")
+                return plan
+            except (ValueError, json.JSONDecodeError) as e:
+                print(f"[planner] parse attempt {attempt + 1} failed: {e}")
+
+        print("[planner] all attempts failed, returning None")
+        return None
 
     def assess(
         self,
         step: Dict[str, Any],
         before_obs: Dict[str, Any],
         after_obs: Dict[str, Any],
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         start = time.time()
         print("[assessor] thinking...")
-        result = self.model.invoke(
-            [
-                SystemMessage(ASSESSOR_SYSTEM_PROMPT),
-                self._build_assessor_human_message(step, before_obs, after_obs),
-            ]
-        )
 
-        result = re.search(r"(\{.*\})", result.content, re.DOTALL).group()
-        result = json.loads(result)
+        messages = [
+            SystemMessage(ASSESSOR_SYSTEM_PROMPT),
+            self._build_assessor_human_message(step, before_obs, after_obs),
+        ]
 
-        elapsed = time.time() - start
-        print(f"[assessor] thought for {elapsed:.1f}s")
-        if result["success"]:
-            print(f"[assessor] step succeed")
-        else:
-            print(f"[assessor] step failed (reason: {result.get('reason')})")
+        for attempt in range(2):
+            answer = self.model.invoke(messages)
+            try:
+                result = self._parse_assessment_result(answer)
+                self.conversation.append([messages, answer])
+                elapsed = time.time() - start
+                print(f"[assessor] thought for {elapsed:.1f}s")
+                if result["success"]:
+                    print(f"[assessor] step succeed")
+                else:
+                    print(f"[assessor] step failed (reason: {result.get('reason')})")
+                return result
+            except (ValueError, json.JSONDecodeError) as e:
+                print(f"[assessor] parse attempt {attempt + 1} failed: {e}")
 
-        return result
-    
+        print("[assessor] all attempts failed, returning None")
+        return None
+
     def replan(
         self,
         instruction: str,
         obs: Dict[str, Any],
         history: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> Optional[List[Dict[str, Any]]]:
         start = time.time()
         print("[replanner] thinking...")
-        result = self.model.invoke(
-            [
-                self._build_replanner_system_message(),
-                self._build_replanner_human_message(instruction, obs, history or ""),
-            ]
-        )
-        elapsed = time.time() - start
-        print(f"[replanner] thought for {elapsed:.1f}s")
 
-        plan = re.search(r"(\[.*\])", result.content, re.DOTALL).group(1)
-        plan = json.loads(plan)
+        messages = [
+            self._build_replanner_system_message(),
+            self._build_replanner_human_message(instruction, obs, history),
+        ]
 
-        return plan
+        for attempt in range(2):
+            answer = self.model.invoke(messages)
+            try:
+                plan = self._parse_plan(answer)
+                self.conversation.append([messages, answer])
+                elapsed = time.time() - start
+                print(f"[replanner] thought for {elapsed:.1f}s")
+                return plan
+            except (ValueError, json.JSONDecodeError) as e:
+                print(f"[replanner] parse attempt {attempt + 1} failed: {e}")
+
+        print("[replanner] all attempts failed, returning None")
+        return None
 
     def _build_planner_system_message(self) -> SystemMessage:
         skills_description = build_skills_description(Controller)
@@ -132,7 +150,6 @@ class TaskPlanner:
         params = step.get("params") or {}
         skill_fn = getattr(Controller, name, None)
         skill_description = get_function_description(name, skill_fn)
-
         user_prompt = ASSESSOR_USER_PROMPT.format(
             skill_name=name,
             skill_params=str(params),
@@ -140,7 +157,6 @@ class TaskPlanner:
             scene_before=before_obs["scene_description"],
             scene_after=after_obs["scene_description"],
         )
-
         return HumanMessage(
             content=[
                 {"type": "text", "text": "BEFORE execution:"},
@@ -180,11 +196,10 @@ class TaskPlanner:
         self, instruction: str, obs: Dict[str, Any], history: str
     ) -> HumanMessage:
         user_prompt = REPLANNER_USER_PROMPT.format(
-            task_description=instruction,
+            task_instruction=instruction,
             scene_description=obs["scene_description"],
             history=history,
         )
-
         return HumanMessage(
             content=[
                 {"type": "text", "text": user_prompt},
@@ -200,3 +215,17 @@ class TaskPlanner:
                 },
             ]
         )
+
+    def _parse_plan(self, answer):
+        match = re.search(r"\[.*\]", answer.content, re.DOTALL)
+        if not match:
+            raise ValueError(f"No JSON array found in response")
+        plan = json.loads(match.group())
+        return plan
+
+    def _parse_assessment_result(self, answer):
+        match = re.search(r"\{.*\}", answer.content, re.DOTALL)
+        if not match:
+            raise ValueError(f"No JSON object found in response")
+        result = json.loads(match.group())
+        return result
