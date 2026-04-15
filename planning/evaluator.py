@@ -8,6 +8,7 @@ class Evaluator:
         self.debug = debug
         self.vis = vis
         self.output_dir = output_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
         self.save_conv = save_conv
 
     def run_episode(self, model, env):

@@ -32,10 +32,8 @@ def parse_args():
 
 
 def main(args):
-    if any(args.save_conv, args.save_video, args.save_traj, args.history):
-        model_name = args.model.split('/')[-1]
-        output_dir = Path(f"{args.scene_dir}/artifacts_model={model_name}/{time.strftime('%Y%m%d_%H%M%S')}")
-        output_dir.mkdir(parents=True, exist_ok=True)
+    model_name = args.model.split('/')[-1]
+    output_dir = Path(f"{args.scene_dir}/artifacts_model={model_name}/{time.strftime('%Y%m%d_%H%M%S')}")
 
     env = gym.make(
         args.env_id, 
