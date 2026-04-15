@@ -10,17 +10,30 @@ from dsynth.envs import DarkstoreContinuousBaseEnv
 
 def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     obs = env.base_env.get_obs()
-    camera_data = obs["sensor_data"]["right_base_camera_link"]
-    image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
-    segmentation = camera_data["segmentation"][0].cpu().numpy()[..., 0]
 
-    scale = 3
-    image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-    segmentation = cv2.resize(
-        segmentation, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
-    )
+    cameras = ["left_base_camera_link", "fetch_hand", "right_base_camera_link"]
+    images = []
+    annotated_images = []
+    for camera in cameras:
+        camera_data = obs["sensor_data"][camera]
+        image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
+        seg = camera_data["segmentation"][0].cpu().numpy()[..., 0]
 
-    annotated_image = annotate_image(image, segmentation, env)
+        scale = 768 / image.shape[0]
+        image = cv2.resize(
+            image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR
+        )
+        seg = cv2.resize(
+            seg, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
+        )
+
+        annotated_image = annotate_image(image, seg, env)
+
+        images.append(image)
+        annotated_images.append(annotated_image)
+
+    image = np.hstack(images)
+    annotated_image = np.hstack(annotated_images)
 
     cv2.imwrite("outputs/original.png", image)
     cv2.imwrite("outputs/annotated.png", annotated_image)
