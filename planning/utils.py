@@ -35,9 +35,6 @@ def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     image = np.hstack(images)
     annotated_image = np.hstack(annotated_images)
 
-    cv2.imwrite("outputs/original.png", image)
-    cv2.imwrite("outputs/annotated.png", annotated_image)
-
     return {
         "image": image_to_base64(image),
         "annotated_image": image_to_base64(annotated_image),
