@@ -103,10 +103,9 @@ class TaskPlanner:
         self, instruction: str, obs: Dict[str, Any]
     ) -> HumanMessage:
         user_prompt = PLANNER_USER_PROMPT.format(
-            task_description=instruction,
+            task_instruction=instruction,
             scene_description=obs["scene_description"],
         )
-
         return HumanMessage(
             content=[
                 {"type": "text", "text": user_prompt},
