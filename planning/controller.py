@@ -284,6 +284,7 @@ class Controller:
         print(f"[controller] finished ({elapsed:.1f}s)")
         if result == -1:
             print(f"[controller] motion planning failed")
+            print(stdout)
             return result
         print(f"[controller] motion planning succeed")
         self.solver.planner.update_from_simulation()
