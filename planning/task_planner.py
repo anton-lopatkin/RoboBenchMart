@@ -11,8 +11,6 @@ from langchain.messages import AIMessage, HumanMessage, SystemMessage
 from planning.prompts import (
     PLANNER_SYSTEM_PROMPT,
     PLANNER_USER_PROMPT,
-    ASSESSOR_SYSTEM_PROMPT,
-    ASSESSOR_USER_PROMPT,
     REPLANNER_SYSTEM_PROMPT,
     REPLANNER_USER_PROMPT,
 )
@@ -50,38 +48,6 @@ class TaskPlanner:
                 print(f"[planner] parse attempt {attempt + 1} failed: {e}")
 
         print("[planner] all attempts failed, returning None")
-        return None
-
-    def assess(
-        self,
-        step: Dict[str, Any],
-        before_obs: Dict[str, Any],
-        after_obs: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        start = time.time()
-        print("[assessor] thinking...")
-
-        messages = [
-            SystemMessage(ASSESSOR_SYSTEM_PROMPT),
-            self._build_assessor_human_message(step, before_obs, after_obs),
-        ]
-
-        for attempt in range(2):
-            answer = self.model.invoke(messages)
-            try:
-                result = self._parse_assessment_result(answer)
-                self.conversation += messages + [answer]
-                elapsed = time.time() - start
-                print(f"[assessor] thought for {elapsed:.1f}s")
-                if result["success"]:
-                    print(f"[assessor] step succeed")
-                else:
-                    print(f"[assessor] step failed (reason: {result.get('reason')})")
-                return result
-            except (ValueError, json.JSONDecodeError) as e:
-                print(f"[assessor] parse attempt {attempt + 1} failed: {e}")
-
-        print("[assessor] all attempts failed, returning None")
         return None
 
     def replan(
@@ -142,49 +108,6 @@ class TaskPlanner:
             ]
         )
 
-    def _build_assessor_human_message(
-        self,
-        step: Dict[str, Any],
-        before_obs: Dict[str, Any],
-        after_obs: Dict[str, Any],
-    ) -> HumanMessage:
-        name = step["name"]
-        params = step.get("params") or {}
-        skill_fn = getattr(Controller, name, None)
-        skill_description = get_function_description(name, skill_fn)
-        user_prompt = ASSESSOR_USER_PROMPT.format(
-            skill_name=name,
-            skill_params=str(params),
-            skill_description=skill_description,
-            scene_before=before_obs["scene_description"],
-            scene_after=after_obs["scene_description"],
-        )
-        return HumanMessage(
-            content=[
-                {"type": "text", "text": user_prompt},
-                {
-                    "type": "image",
-                    "base64": before_obs["image"],
-                    "mime_type": "image/png",
-                },
-                {
-                    "type": "image",
-                    "base64": before_obs["annotated_image"],
-                    "mime_type": "image/png",
-                },
-                {
-                    "type": "image",
-                    "base64": after_obs["image"],
-                    "mime_type": "image/png",
-                },
-                {
-                    "type": "image",
-                    "base64": after_obs["annotated_image"],
-                    "mime_type": "image/png",
-                },
-            ]
-        )
-
     def _build_replanner_system_message(self) -> SystemMessage:
         skills_description = build_skills_description(Controller)
         system_prompt = REPLANNER_SYSTEM_PROMPT.format(
@@ -222,13 +145,6 @@ class TaskPlanner:
             raise ValueError(f"No JSON array found in response")
         plan = json.loads(match.group())
         return plan
-
-    def _parse_assessment_result(self, answer):
-        match = re.search(r"\{.*\}", answer.content, re.DOTALL)
-        if not match:
-            raise ValueError(f"No JSON object found in response")
-        result = json.loads(match.group())
-        return result
 
     def save_conversation(self, output_dir: str):
         images_dir = os.path.join(output_dir, "images")

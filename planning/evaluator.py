@@ -41,42 +41,18 @@ class Evaluator:
                 history.append(
                     f"{line} [motion planning failed] \n{controller.last_stdout}"
                 )
-                observations = prepare_observations(env)
-                replanned_steps = task_planner.replan(
-                    language_instruction, observations, "\n".join(history)
-                )
-                if self.save_conv:
-                    task_planner.save_conversation(self.output_dir)
-                if not replanned_steps:
-                    break
-                plan = plan[: i + 1] + replanned_steps
-                i += 1
-                continue
+            else:
+                history.append(f"{line} [motion planning succeed]")
 
-            prev_observations = observations
             observations = prepare_observations(env)
-
-            result = task_planner.assess(step, prev_observations, observations)
-            if self.save_conv:
-                task_planner.save_conversation(self.output_dir)
-
-            if result["success"]:
-                history.append(f"{line} [success]")
-                i += 1
-                continue
-
-            history.append(f"{line} [failure] {result.get('reason')}")
-
             replanned_steps = task_planner.replan(
                 language_instruction, observations, "\n".join(history)
             )
-
             if self.save_conv:
                 task_planner.save_conversation(self.output_dir)
             if not replanned_steps:
                 break
             plan = plan[: i + 1] + replanned_steps
-
             i += 1
-
+    
         return "\n".join(history)
