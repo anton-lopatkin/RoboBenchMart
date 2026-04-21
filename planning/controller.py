@@ -362,3 +362,37 @@ class Controller:
         )
 
         return grasp_pose
+
+    def _unproject_shelf_point(self, u, v):
+        shelf_depth = 0.5
+
+        camera = self.env.agent.scene.sensors['left_base_camera_link'].camera
+
+        camera_pose = camera.global_pose.sp * sapien.Pose(p=[0, 0, 0], q=[0.5004, -0.5, 0.5, -0.5])
+        camera_pose = camera_pose.to_transformation_matrix()
+        R_cam = camera_pose[:3, :3]
+        t_cam = camera_pose[:3, 3]
+        
+        actor_shelf_name = self.env.active_shelves[0][0]
+        shelf_pose = self.env.actors["fixtures"]["shelves"][actor_shelf_name].pose.sp
+        direction_to_shelf = shelf_pose.to_transformation_matrix()[:3, 1]
+
+        t_shelf_plane_world = shelf_pose.p - 0.5 * shelf_depth * direction_to_shelf
+        n_shelf_plane_world = direction_to_shelf.copy()
+
+        t_shelf_plane_cam = R_cam.T @ (t_shelf_plane_world - t_cam)
+        n_shelf_plane_cam = R_cam.T @ n_shelf_plane_world
+
+        A = np.array([
+            [camera.fx, 0, camera.cx - u],
+            [0, camera.fy, camera.cy - v],
+            [n_shelf_plane_cam[0], n_shelf_plane_cam[1], n_shelf_plane_cam[2]]
+        ])
+        b = np.array([
+            0,
+            0,
+            np.dot(n_shelf_plane_cam, t_shelf_plane_cam)
+        ])
+        X_cam = np.linalg.inv(A) @ b
+        X_world = R_cam @ X_cam + t_cam
+        return X_world
