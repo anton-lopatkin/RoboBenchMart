@@ -45,8 +45,11 @@ class Evaluator:
                 history.append(f"{line} [motion planning succeed]")
 
             observations = prepare_observations(env)
+            reflection = task_planner.reflect(
+                language_instruction, observations, history[-1]
+            )
             replanned_steps = task_planner.replan(
-                language_instruction, observations, "\n".join(history)
+                language_instruction, observations, "\n".join(history), reflection
             )
             if self.save_conv:
                 task_planner.save_conversation(self.output_dir)

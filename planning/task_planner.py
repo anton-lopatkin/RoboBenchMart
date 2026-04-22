@@ -13,6 +13,8 @@ from planning.prompts import (
     PLANNER_USER_PROMPT,
     REPLANNER_SYSTEM_PROMPT,
     REPLANNER_USER_PROMPT,
+    REFLECTOR_SYSTEM_PROMPT,
+    REFLECTOR_USER_PROMPT,
 )
 from planning.utils import build_skills_description, get_function_description
 from planning.controller import Controller
@@ -22,6 +24,9 @@ class TaskPlanner:
     def __init__(self, model: str):
         self.model = ChatOpenRouter(model=model)
         self.conversation = []
+        self.planner_history = [self._build_planner_system_message()]
+        self.reflector_history = []
+        self._replanner_initialized = False
 
     def plan(
         self,
@@ -31,18 +36,18 @@ class TaskPlanner:
         start = time.time()
         print("[planner] thinking...")
 
-        messages = [
-            self._build_planner_system_message(),
-            self._build_planner_human_message(instruction, obs),
-        ]
+        human_msg = self._build_planner_human_message(instruction, obs)
+        self.planner_history.append(human_msg)
 
         for attempt in range(2):
-            answer = self.model.invoke(messages)
+            answer = self.model.invoke(self.planner_history)
             try:
                 plan = self._parse_plan(answer)
-                self.conversation += messages + [answer]
+                self.planner_history.append(answer)
                 elapsed = time.time() - start
                 print(f"[planner] thought for {elapsed:.1f}s")
+                self._print_usage("planner", answer)
+                print(f"[planner] response:\n{answer.content}")
                 return plan
             except (ValueError, json.JSONDecodeError) as e:
                 print(f"[planner] parse attempt {attempt + 1} failed: {e}")
@@ -50,27 +55,60 @@ class TaskPlanner:
         print("[planner] all attempts failed, returning None")
         return None
 
+    def reflect(
+        self,
+        instruction: str,
+        obs: Dict[str, Any],
+        last_step: str,
+    ) -> str:
+        start = time.time()
+        print("[reflector] thinking...")
+
+        if not self.reflector_history:
+            skills_description = build_skills_description(Controller)
+            system_prompt = (
+                REFLECTOR_SYSTEM_PROMPT.format(skills_description=skills_description)
+                + f"\n\nTask Instruction: {instruction}\nCurrent Trajectory below:"
+            )
+            self.reflector_history = [SystemMessage(system_prompt)]
+
+        human_msg = self._build_reflector_human_message(obs, last_step)
+        self.reflector_history.append(human_msg)
+
+        answer = self.model.invoke(self.reflector_history)
+        self.reflector_history.append(answer)
+
+        elapsed = time.time() - start
+        print(f"[reflector] thought for {elapsed:.1f}s")
+        self._print_usage("reflector", answer)
+        print(f"[reflector] response:\n{answer.content}")
+        return answer.content
+
     def replan(
         self,
         instruction: str,
         obs: Dict[str, Any],
         history: str,
+        reflection: str,
     ) -> Optional[List[Dict[str, Any]]]:
         start = time.time()
         print("[replanner] thinking...")
 
-        messages = [
-            self._build_replanner_system_message(),
-            self._build_replanner_human_message(instruction, obs, history),
-        ]
+        if not self._replanner_initialized:
+            self.planner_history.append(self._build_replanner_system_message())
+            self._replanner_initialized = True
+        human_msg = self._build_replanner_human_message(instruction, obs, history, reflection)
+        self.planner_history.append(human_msg)
 
         for attempt in range(2):
-            answer = self.model.invoke(messages)
+            answer = self.model.invoke(self.planner_history)
             try:
                 plan = self._parse_plan(answer)
-                self.conversation += messages + [answer]
+                self.planner_history.append(answer)
                 elapsed = time.time() - start
                 print(f"[replanner] thought for {elapsed:.1f}s")
+                self._print_usage("replanner", answer)
+                print(f"[replanner] response:\n{answer.content}")
                 return plan
             except (ValueError, json.JSONDecodeError) as e:
                 print(f"[replanner] parse attempt {attempt + 1} failed: {e}")
@@ -109,19 +147,31 @@ class TaskPlanner:
         )
 
     def _build_replanner_system_message(self) -> SystemMessage:
-        skills_description = build_skills_description(Controller)
-        system_prompt = REPLANNER_SYSTEM_PROMPT.format(
-            skills_description=skills_description
+        return SystemMessage(REPLANNER_SYSTEM_PROMPT)
+
+    def _build_reflector_human_message(
+        self, obs: Dict[str, Any], last_step: str
+    ) -> HumanMessage:
+        user_prompt = REFLECTOR_USER_PROMPT.format(
+            last_step=last_step,
+            scene_description=obs["scene_description"],
         )
-        return SystemMessage(system_prompt)
+        return HumanMessage(
+            content=[
+                {"type": "text", "text": user_prompt},
+                {"type": "image", "base64": obs["image"], "mime_type": "image/png"},
+                {"type": "image", "base64": obs["annotated_image"], "mime_type": "image/png"},
+            ]
+        )
 
     def _build_replanner_human_message(
-        self, instruction: str, obs: Dict[str, Any], history: str
+        self, instruction: str, obs: Dict[str, Any], history: str, reflection: str
     ) -> HumanMessage:
         user_prompt = REPLANNER_USER_PROMPT.format(
             task_instruction=instruction,
             scene_description=obs["scene_description"],
             history=history,
+            reflection=reflection,
         )
         return HumanMessage(
             content=[
@@ -138,6 +188,21 @@ class TaskPlanner:
                 },
             ]
         )
+
+    def _print_usage(self, tag: str, answer):
+        usage = answer.usage_metadata
+        if not usage:
+            return
+        in_tok = usage.get('input_tokens', '?')
+        out_tok = usage.get('output_tokens', '?')
+        total = usage.get('total_tokens', '?')
+        cache_read = usage.get('input_token_details', {}).get('cache_read', 0)
+        cache_write = usage.get('input_token_details', {}).get('cache_creation', 0)
+        reasoning = usage.get('output_token_details', {}).get('reasoning', 0)
+
+        in_str = f"in={in_tok}" + (f" (cache_read={cache_read})" if cache_read else "") + (f" (cache_write={cache_write})" if cache_write else "")
+        out_str = f"out={out_tok}" + (f" (reasoning={reasoning})" if reasoning else "")
+        print(f"[{tag}] tokens: {in_str} {out_str} total={total}")
 
     def _parse_plan(self, answer):
         match = re.search(r"\[.*\]", answer.content, re.DOTALL)
