@@ -66,9 +66,9 @@ class TaskPlanner:
 
         if not self.reflector_history:
             skills_description = build_skills_description(Controller)
-            system_prompt = (
-                REFLECTOR_SYSTEM_PROMPT.format(skills_description=skills_description)
-                + f"\n\nTask Instruction: {instruction}\nCurrent Trajectory below:"
+            system_prompt = REFLECTOR_SYSTEM_PROMPT.format(
+                task_instruction=instruction,
+                skills_description=skills_description,
             )
             self.reflector_history = [SystemMessage(system_prompt)]
 
