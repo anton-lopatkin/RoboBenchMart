@@ -58,7 +58,7 @@ def main(args):
     env.reset(seed=args.seed, options={"reconfigure": True})
 
     evaluator = Evaluator(output_dir, args.save_conv, args.debug, args.vis)
-    history = evaluator.run_episode(args.model, env)
+    evaluator.run_episode(args.model, env)
 
     if args.vis:
         viewer = env.render_human()

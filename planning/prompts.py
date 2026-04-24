@@ -16,13 +16,13 @@ You will receive the following input:
         - "products": List of all reachable products in the scene. Each product is a dictionary with:
             - "product_id" — unique numeric identifier (exactly matches the number shown on the annotated image)
             - "product_name" — the name of the product
+    - History: a log of all skills executed so far with their motion planning outcomes.
+    - Reflection: an independent assessment of the true current state of the task.
+    Use it to catch silent failures — cases where motion planning succeeded but the skill did not achieve its intended effect.
 
 Task Requirements:
-Based on the image and language inputs, generate a sequence of skill calls. 
-Each skill call sequence should contain the skill name and the skill parameters (if the skill requires parameters).
-
-Available Skills:
-{skills_description}
+Based on the image and language inputs, generate next skill call to achieve task goal. 
+Each skill call should contain the skill name and the skill parameters (if the skill requires parameters).
 
 Typical Patterns and Heuristics:
 - To pick up a product a typical sequence looks like:
@@ -36,35 +36,6 @@ Typical Patterns and Heuristics:
     1. move_base_forward (with negative delta)
     2. move_ee_to_drop_pose
     3. release
-
-Output Format: 
-[
-    {{"name": "skill_name_1", "params": {{"parameter": value}}}},
-    {{"name": "skill_name_2", "params": {{"parameter": value}}}}
-]
-"""
-
-PLANNER_USER_PROMPT = """
-Task Instruction: 
-{task_instruction}
-
-Scene Description:
-{scene_description}
-
-Generate a sequence of skill calls and return nothing except the sequence in the specified format.
-"""
-
-REPLANNER_SYSTEM_PROMPT = """
-You are now replanning. In addition to the scene description, you will receive:
-- History: a log of all skills executed so far with their motion planning outcomes.
-- Reflection: an independent assessment of the true current state of the task.
-  Use it to catch silent failures — cases where motion planning succeeded but the skill did not achieve its intended effect.
-
-Replanning Rules:
-- Generate a COMPLETE plan from the current state to task completion.
-- Use History to understand what has already been done.
-- Use Reflection to understand the true current state.
-- Do NOT repeat the exact same failed action with the same parameters.
 
 Failure Handling Strategy:
 - collision during the attempt to move end-effector to grasp pose [IK Failure, RRTConnect Failure]
@@ -84,12 +55,18 @@ Failure Handling Strategy:
         - try smaller distance
     - joint limits
         - try to adjust ee position with move_ee_by or move_ee_to_neutral_pose
+
+Task Instruction:
+{instruction}
+
+Available Skills:
+{skills}
+
+Output Format: 
+{{"name": "skill_name_1", "params": {{"parameter": value}}}}
 """
 
-REPLANNER_USER_PROMPT = """
-Task Instruction:
-{task_instruction}
-
+PLANNER_USER_PROMPT = """
 Scene Description:
 {scene_description}
 
@@ -99,12 +76,12 @@ History:
 Reflection:
 {reflection}
 
-Generate a sequence of skill calls and return nothing except the sequence in the specified format.
+Generate a skill call and return nothing except the skill in the specified format.
 """
 
 REFLECTOR_SYSTEM_PROMPT = """
 You are a reflection agent for a robot manipulation task.
-Task Instruction: {task_instruction}
+Task Instruction: {instruction}
 
 Each turn you receive the most recently executed skill and the current scene observation.
 The full execution history is encoded in the prior turns of this conversation.
@@ -146,7 +123,7 @@ Rules:
 - Do not prefix your response with a case label.
 
 Available Skills:
-{skills_description}
+{skills}
 """
 
 REFLECTOR_USER_PROMPT = """
