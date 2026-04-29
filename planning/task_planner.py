@@ -7,6 +7,7 @@ import time
 
 from langchain_openrouter import ChatOpenRouter
 from langchain.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import trim_messages
 
 from planning.controller import Controller
 from planning.prompts import (
@@ -25,11 +26,13 @@ class DarkstoreAgent:
         controller: Controller,
         instruction: str,
         enable_reflection: bool = True,
+        max_history_messages: int = 16,
     ):
         self.model = ChatOpenRouter(model=model)
         self.controller = controller
         self.instruction = instruction
         self.enable_reflection = enable_reflection
+        self.max_history_messages = max_history_messages
         self.conversation = {
             "planner": [self._build_planner_system_message()],
             "reflector": [self._build_reflector_system_message()],
@@ -72,7 +75,15 @@ class DarkstoreAgent:
         print(f"[{agent}] thinking...")
 
         self.conversation[agent].append(msg)
-        answer = self.model.invoke(self.conversation[agent])
+        trimmed = trim_messages(
+            self.conversation[agent],
+            max_tokens=self.max_history_messages,
+            token_counter=len,
+            strategy='last',
+            include_system=True,
+            start_on='human',
+        )
+        answer = self.model.invoke(trimmed)
         self.conversation[agent].append(answer)
 
         elapsed = time.time() - start
