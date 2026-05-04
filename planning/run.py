@@ -26,7 +26,6 @@ def parse_args():
     parser.add_argument("--save-conv", action="store_true", help="whether or not to save VLM conversation locally")
     parser.add_argument("--save-video", action="store_true", help="whether or not to save videos locally")
     parser.add_argument("--save-traj", action="store_true", help="whether or not to save trajectory locally")
-    parser.add_argument("--history", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -57,7 +56,7 @@ def main(args):
 
     env.reset(seed=args.seed, options={"reconfigure": True})
 
-    evaluator = Evaluator(output_dir, args.save_conv, args.debug, args.vis)
+    evaluator = Evaluator(output_dir, args.debug, args.vis)
     evaluator.run_episode(args.model, env)
 
     if args.vis:
@@ -70,11 +69,6 @@ def main(args):
             env.render_human()
 
     env.close()
-
-    if args.history:
-        history_file = output_dir / "history.txt"
-        with open(history_file, "w") as f:
-            f.write(history)
 
 
 if __name__ == "__main__":

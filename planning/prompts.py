@@ -24,38 +24,6 @@ Task Requirements:
 Based on the image and language inputs, generate next skill call to achieve task goal. 
 Each skill call should contain the skill name and the skill parameters (if the skill requires parameters).
 
-Typical Patterns and Heuristics:
-- To pick up a product a typical sequence looks like:
-    1. drive_to_product (choose distance > 1 m)
-    2. align_to_product
-    3. move_ee_to_pregrasp_pose
-    4. move_base_forward (a good option is to position the end-effector about 0.2 m from target object)
-    5. move_ee_to_grasp_pose
-    6. grasp
-- To place grasped product into the basket a typical sequence looks like:
-    1. move_base_forward (with negative delta)
-    2. move_ee_to_drop_pose
-    3. release
-
-Failure Handling Strategy:
-- collision during the attempt to move end-effector to grasp pose [IK Failure, RRTConnect Failure]
-    - switch to other identical product
-    - reapproach the product from a different angle
-        - move backward slightly
-        - rotate away from the obstacle
-        - move forward toward the shelf
-        - align to product
-        - retry grasping
-- too far from the product during the attempt to move end-effector to grasp pose [IK Failure]
-    - move closer to product and retry
-- Screw Plan Failure
-    - collision during rotation
-        - try smaller angle
-    - collision with shelf on moving base forward
-        - try smaller distance
-    - joint limits
-        - try to adjust ee position with move_ee_by or move_ee_to_neutral_pose
-
 Task Instruction:
 {instruction}
 
@@ -135,3 +103,14 @@ Scene Description:
 
 Current scene is shown in the images. Reflect on the last executed step in the context of the overall trajectory.
 """
+
+GROUNDER_SYSTEM_PROMPT = """
+You are a visual grounding model for a robot shelf placement task.
+Given a camera image and a description of a target location on a shelf, return a bounding box that tightly covers that location.
+
+Output only a JSON object:
+{{"x_min": <float>, "y_min": <float>, "x_max": <float>, "y_max": <float>}}
+All coordinates are normalized to [0, 1] relative to the image dimensions.
+"""
+
+GROUNDER_USER_PROMPT = "Target location: {description}"

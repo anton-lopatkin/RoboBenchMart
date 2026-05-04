@@ -1,4 +1,3 @@
-import base64
 import json
 import os
 import re
@@ -15,8 +14,10 @@ from planning.prompts import (
     PLANNER_USER_PROMPT,
     REFLECTOR_SYSTEM_PROMPT,
     REFLECTOR_USER_PROMPT,
+    GROUNDER_SYSTEM_PROMPT,
+    GROUNDER_USER_PROMPT,
 )
-from planning.utils import build_skills_description
+from planning.utils import build_skills_description, draw_normalized_bbox, image_to_base64
 
 
 class DarkstoreAgent:
@@ -38,6 +39,7 @@ class DarkstoreAgent:
             "reflector": [self._build_reflector_system_message()],
         }
         self.history = []
+        self.last_grounder_image = None
 
     def next_action(
         self,
@@ -60,6 +62,11 @@ class DarkstoreAgent:
         line = f"{len(self.history) + 1}. {skill}{f' {params}' if params else ''}"
         print(line)
 
+        if skill == "place_to_shelf":
+            bbox = self._call_grounder(obs, params["camera"], params["description"])
+            fn = self.controller._place_to_shelf
+            params = {"bbox": bbox, "camera": params["camera"]}
+
         result = fn(**params)
         if result == -1:
             self.history.append(
@@ -70,6 +77,29 @@ class DarkstoreAgent:
 
         return answer
     
+    def _call_grounder(self, obs: Dict[str, Any], camera: str, description: str) -> dict:
+        start = time.time()
+        print(f"[grounder] thinking...")
+
+        messages = [
+            SystemMessage(GROUNDER_SYSTEM_PROMPT),
+            self._build_grounder_human_message(obs[camera]["image"], description)
+        ]
+        answer = self.model.invoke(messages)
+
+        elapsed = time.time() - start
+        print(f"[grounder] thought for {elapsed:.1f}s")
+        self._print_usage("grounder", answer)
+        print(f"[grounder] response:\n{answer.content}")
+
+        match = re.search(r"\{.*\}", answer.content, re.DOTALL)
+        if not match:
+            raise ValueError("No bbox JSON found in grounder response")
+        bbox = json.loads(match.group(0))
+
+        self.last_grounder_image = draw_normalized_bbox(obs[camera]["image"], bbox)
+        return bbox
+
     def _call_agent(self, agent, msg):
         start = time.time()
         print(f"[{agent}] thinking...")
@@ -130,12 +160,12 @@ class DarkstoreAgent:
             content=[
                 {
                     "type": "image",
-                    "base64": obs["image"],
+                    "base64": image_to_base64(obs["combined"]["image"]),
                     "mime_type": "image/png",
                 },
                 {
                     "type": "image",
-                    "base64": obs["annotated_image"],
+                    "base64": image_to_base64(obs["combined"]["annotated_image"]),
                     "mime_type": "image/png",
                 },
                 {"type": "text", "text": user_prompt},
@@ -152,16 +182,31 @@ class DarkstoreAgent:
         return HumanMessage(
             content=[
                 {
+                    "type": "image",
+                    "base64": image_to_base64(obs["combined"]["image"]),
+                    "mime_type": "image/png",
+                },
+                {
+                    "type": "image",
+                    "base64": image_to_base64(obs["combined"]["annotated_image"]),
+                    "mime_type": "image/png",
+                },
+                {"type": "text", "text": user_prompt},
+            ]
+        )
+    
+    def _build_grounder_human_message(image, description) -> HumanMessage:
+        return HumanMessage(
+            content=[
+                {
                     "type": "image", 
-                    "base64": obs["image"], 
+                    "base64": image_to_base64(image), 
                     "mime_type": "image/png"
                 },
                 {
-                    "type": "image", 
-                    "base64": obs["annotated_image"], 
-                    "mime_type": "image/png"
+                    "type": "text", 
+                    "text": GROUNDER_USER_PROMPT.format(description=description)
                 },
-                {"type": "text", "text": user_prompt},
             ]
         )
 

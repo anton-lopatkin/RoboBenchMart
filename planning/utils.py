@@ -4,16 +4,17 @@ import base64
 import cv2
 import inspect
 import numpy as np
-
 from dsynth.envs import DarkstoreContinuousBaseEnv
 
 
 def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
     obs = env.base_env.get_obs()
 
-    cameras = ["left_base_camera_link", "fetch_hand", "right_base_camera_link"]
-    images = []
+    result = {}
+    raw_images = []
     annotated_images = []
+
+    cameras = ["left_base_camera_link", "fetch_hand", "right_base_camera_link"]
     for camera in cameras:
         camera_data = obs["sensor_data"][camera]
         image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
@@ -29,17 +30,20 @@ def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
 
         annotated_image = annotate_image(image, seg, env)
 
-        images.append(image)
+        result[camera] = {
+            "image": image,
+            "annotated_image": annotated_image,
+        }
+        raw_images.append(image)
         annotated_images.append(annotated_image)
 
-    image = np.hstack(images)
-    annotated_image = np.hstack(annotated_images)
-
-    return {
-        "image": image_to_base64(image),
-        "annotated_image": image_to_base64(annotated_image),
-        "scene_description": prepare_scene_description(env),
+    result["combined"] = {
+        "image": np.hstack(raw_images),
+        "annotated_image": np.hstack(annotated_images),
     }
+    result["scene_description"] = prepare_scene_description(env)
+
+    return result
 
 
 def image_to_base64(image: np.ndarray) -> Optional[str]:
@@ -213,3 +217,16 @@ def build_skills_description(controller_cls) -> str:
             continue
         skills.append(get_function_description(name, method))
     return "\n\n".join(f"{i}. {s}" for i, s in enumerate(skills, start=1))
+
+
+def draw_normalized_bbox(
+    image: np.ndarray, 
+    bbox: dict, color: tuple = (0, 255, 0), 
+    thickness: int = 2
+) -> np.ndarray:
+    h, w = image.shape[:2]
+    pt1 = (int(bbox["x_min"] * w), int(bbox["y_min"] * h))
+    pt2 = (int(bbox["x_max"] * w), int(bbox["y_max"] * h))
+    output = image.copy()
+    cv2.rectangle(output, pt1, pt2, color, thickness)
+    return output
