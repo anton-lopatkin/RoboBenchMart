@@ -16,24 +16,25 @@ class Evaluator:
         self.vis = vis
         self.output_dir = Path(output_dir)
 
+    MAX_STEPS = 30
+
     def run_episode(self, model, env):
         instruction = "move beer 98 on a shelf with a milk"# "take one milk and one beer"  # env.language_instructions[0]
 
         controller = Controller(env, debug=self.debug, vis=self.vis)
         agent = DarkstoreAgent(model, controller, instruction, enable_reflection=False)
 
-        i = 0
-        while True:
+        for i in range(self.MAX_STEPS):
             obs = prepare_observations(env)
             self._save_obs(obs, i)
-            agent.last_grounder_image = None
-            agent.next_action(obs)
+            status = agent.next_action(obs)
 
             if agent.last_grounder_image is not None:
                 step_dir = self.output_dir / f"step_{i:03d}"
                 self._save_image(step_dir / "grounder_bbox.png", agent.last_grounder_image)
-                
-            i += 1
+
+            if status in ("done", "fail"):
+                break
 
     def _save_obs(self, obs, step: int):
         step_dir = self.output_dir / f"step_{step:03d}"

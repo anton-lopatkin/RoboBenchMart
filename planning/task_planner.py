@@ -44,12 +44,14 @@ class DarkstoreAgent:
     def next_action(
         self,
         obs: Dict[str, Any],
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Optional[str]:
+        self.last_grounder_image = None
+
         reflection = None
         if self.enable_reflection and self.history:
             msg = self._build_reflector_human_message(obs, self.history[-1])
             reflection = self._call_agent("reflector", msg)
-        
+
         msg = self._build_planner_human_message(obs, reflection)
         answer = self._call_agent("planner", msg)
 
@@ -61,6 +63,10 @@ class DarkstoreAgent:
 
         line = f"{len(self.history) + 1}. {skill}{f' {params}' if params else ''}"
         print(line)
+
+        if skill in ("done", "fail"):
+            self.history.append(line)
+            return skill
 
         if skill == "place_to_shelf":
             bbox = self._call_grounder(obs, params["camera"], params["description"])
@@ -75,7 +81,7 @@ class DarkstoreAgent:
         else:
             self.history.append(f"{line} [motion planning succeed]")
 
-        return answer
+        return None
     
     def _call_grounder(self, obs: Dict[str, Any], camera: str, description: str) -> dict:
         start = time.time()
@@ -195,7 +201,7 @@ class DarkstoreAgent:
             ]
         )
     
-    def _build_grounder_human_message(image, description) -> HumanMessage:
+    def _build_grounder_human_message(self, image, description) -> HumanMessage:
         return HumanMessage(
             content=[
                 {

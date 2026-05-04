@@ -68,7 +68,8 @@ class Controller:
             lambda: self._move_ee_to_grasp_pose(item_id),
             lambda: self._grasp(item_id),
             lambda: self._move_ee_by([0.05, 0, 0]),
-            lambda: self._move_ee_to_neutral_pose()
+            lambda: self._move_base_forward(-0.3),
+            lambda: self._move_ee_to_neutral_pose(),
         )
 
     def place_to_basket(self):
@@ -88,7 +89,8 @@ class Controller:
         )
 
     def place_to_shelf(self, description: str, camera: str):
-        """Place the held product at a shelf location identified by a textual description.
+        """Place the held product at a shelf location identified by a textual 
+        description.
 
         Preconditions:
         - Gripper must be holding a product.
@@ -103,11 +105,40 @@ class Controller:
                 location (e.g., "empty spot on the left side of the middle shelf,
                 next to the juice").
             camera (str): Camera with the best view of the target shelf location.
-                - "left_base_camera_link": wide view of the shelf from the left side of the base
-                - "right_base_camera_link": wide view of the shelf from the right side of the base
-                - "fetch_hand": close-up view from the wrist, facing downward — rarely useful for shelf placement
+                - "left_base_camera_link": wide view of the shelf from the left
+                  side of the base
+                - "right_base_camera_link": wide view of the shelf from the right
+                  side of the base
+                - "fetch_hand": close-up view from the wrist, facing downward — 
+                  rarely useful for shelf placement
         """
         pass
+
+    def done(self):
+        """Signal that the task has been successfully completed.
+
+        Call this when all task objectives have been achieved and no further
+        actions are needed.
+        """
+        return "done"
+
+    def fail(self):
+        """Signal that the task cannot be completed.
+
+        Call this when the task is impossible to complete given the current
+        state (e.g. required item is missing, repeated motion planning
+        failures, goal is already achieved by someone else).
+        """
+        return "fail"
+    
+    def _place_to_shelf(self, bbox: dict, camera: str):
+        point = self._bbox_to_shelf_point(bbox, camera)
+        return self._run_sequence(
+            lambda: self._move_ee_to_height(point[2]),
+            lambda: self._move_base_forward(0.3),
+            lambda: self._move_ee_to_shelf_point(point),
+            lambda: self._release(),
+        )
 
     def _move_ee_to_neutral_pose(self):
         """Move end-effector to a neutral pose.
@@ -153,41 +184,6 @@ class Controller:
             n_init_qpos=100,
             disable_lift_joint=False,
         )
-
-    def _move_ee_to_shelf_bbox(self, bbox: dict, camera: str):
-        """Move end-effector to a bbox-identified shelf point at 10 cm depth.
-
-        Effect:
-        - End-effector moves to the shelf-surface position at the centre of the
-          given bounding box, offset 10 cm inward along the shelf normal; gripper
-          orientation unchanged.
-        - Robot base unchanged.
-
-        Args:
-            bbox (dict): Bounding box with keys x_min, y_min, x_max, y_max in [0, 1],
-            camera (str): Sensor used to capture the image from which bbox was derived.
-        """
-        point = self._bbox_to_shelf_point(bbox, camera)
-        return self._move_ee_to_shelf_point(point)
-
-    def _place_to_shelf(self, bbox: dict, camera: str):
-        point = self._bbox_to_shelf_point(bbox, camera)
-        return self._run_sequence(
-            lambda: self._move_ee_to_height(point[2]),
-            lambda: self._move_base_forward(0.1),
-            lambda: self._move_ee_to_shelf_point(point),
-            lambda: self._release(),
-        )
-
-    def _bbox_to_shelf_point(self, bbox: dict, camera: str) -> np.ndarray:
-        cx = (bbox["x_min"] + bbox["x_max"]) / 2
-        cy = (bbox["y_min"] + bbox["y_max"]) / 2
-
-        cam = self.env.agent.scene.sensors[camera].camera
-        u = cx * cam.width
-        v = cy * cam.height
-
-        return self._unproject_shelf_point(u, v, camera)
 
     def _move_ee_to_shelf_point(self, point: np.ndarray):
         shelf_name = self.env.active_shelves[0][0]
@@ -504,7 +500,17 @@ class Controller:
 
         return grasp_pose
 
-    def _unproject_shelf_point(self, u, v, camera="right_base_camera_link"):
+    def _bbox_to_shelf_point(self, bbox: dict, camera: str) -> np.ndarray:
+        cx = (bbox["x_min"] + bbox["x_max"]) / 2
+        cy = (bbox["y_min"] + bbox["y_max"]) / 2
+
+        cam = self.env.agent.scene.sensors[camera].camera
+        u = cx * cam.width
+        v = cy * cam.height
+
+        return self._unproject_shelf_point(u, v, camera)
+
+    def _unproject_shelf_point(self, u, v, camera):
         shelf_depth = 0.5
 
         cam = self.env.agent.scene.sensors[camera].camera
