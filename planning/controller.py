@@ -32,7 +32,84 @@ class Controller:
             self._base_pose.inv() * self._tcp_pose * sapien.Pose(p=[0.1, 0, 0.1])
         )
 
-    def move_ee_to_neutral_pose(self):
+    def navigate(self, item_id: int):
+        """Drive to and face a product, ready for picking.
+
+        Effect:
+        - Robot base moves to a safe approach distance in front of the target
+          product and rotates to face it directly.
+        - Arm and gripper state unchanged.
+
+        Args:
+            item_id (int): ID of the product to navigate toward.
+        """
+        return self._run_sequence(
+            lambda: self._drive_to_product(item_id, 1.2),
+            lambda: self._align_to_product(item_id),
+        )
+
+    def pick(self, item_id: int):
+        """Execute the full pick sequence for a product.
+
+        Preconditions:
+        - Robot must already be navigated to the product (use navigate first).
+
+        Effect:
+        - End-effector moves to pre-grasp standoff, base advances toward the
+          shelf, end-effector moves to final grasp pose, and gripper closes
+          around the product.
+
+        Args:
+            item_id (int): ID of the product to pick.
+        """
+        return self._run_sequence(
+            lambda: self._move_ee_to_pregrasp_pose(item_id),
+            lambda: self._move_base_forward(0.3),
+            lambda: self._move_ee_to_grasp_pose(item_id),
+            lambda: self._grasp(item_id),
+            lambda: self._move_ee_by([0.05, 0, 0]),
+            lambda: self._move_ee_to_neutral_pose()
+        )
+
+    def place_to_basket(self):
+        """Execute the full place sequence to drop the held item into the basket.
+
+        Preconditions:
+        - Gripper must be holding a product.
+
+        Effect:
+        - Robot base reverses away from the shelf, end-effector moves to the
+          drop pose above the basket, and gripper opens to release the product.
+        """
+        return self._run_sequence(
+            lambda: self._move_base_forward(-0.4),
+            lambda: self._move_ee_to_drop_pose(),
+            lambda: self._release(),
+        )
+
+    def place_to_shelf(self, description: str, camera: str):
+        """Place the held product at a shelf location identified by a textual description.
+
+        Preconditions:
+        - Gripper must be holding a product.
+
+        Effect:
+        - End-effector aligns to the target height, advances to the shelf surface
+          at the described location, and releases the product.
+        - Robot base unchanged.
+
+        Args:
+            description (str): Natural language description of the target shelf
+                location (e.g., "empty spot on the left side of the middle shelf,
+                next to the juice").
+            camera (str): Camera with the best view of the target shelf location.
+                - "left_base_camera_link": wide view of the shelf from the left side of the base
+                - "right_base_camera_link": wide view of the shelf from the right side of the base
+                - "fetch_hand": close-up view from the wrist, facing downward — rarely useful for shelf placement
+        """
+        pass
+
+    def _move_ee_to_neutral_pose(self):
         """Move end-effector to a neutral pose.
         
         Effect:
@@ -51,7 +128,7 @@ class Controller:
         )
 
 
-    def move_ee_to_pregrasp_pose(self, item_id: int):
+    def _move_ee_to_pregrasp_pose(self, item_id: int):
         """Move end-effector to an approach position near the product.
 
         Effect:
@@ -77,8 +154,67 @@ class Controller:
             disable_lift_joint=False,
         )
 
+    def _move_ee_to_shelf_bbox(self, bbox: dict, camera: str):
+        """Move end-effector to a bbox-identified shelf point at 10 cm depth.
 
-    def move_ee_to_grasp_pose(self, item_id: int):
+        Effect:
+        - End-effector moves to the shelf-surface position at the centre of the
+          given bounding box, offset 10 cm inward along the shelf normal; gripper
+          orientation unchanged.
+        - Robot base unchanged.
+
+        Args:
+            bbox (dict): Bounding box with keys x_min, y_min, x_max, y_max in [0, 1],
+            camera (str): Sensor used to capture the image from which bbox was derived.
+        """
+        point = self._bbox_to_shelf_point(bbox, camera)
+        return self._move_ee_to_shelf_point(point)
+
+    def _place_to_shelf(self, bbox: dict, camera: str):
+        point = self._bbox_to_shelf_point(bbox, camera)
+        return self._run_sequence(
+            lambda: self._move_ee_to_height(point[2]),
+            lambda: self._move_base_forward(0.1),
+            lambda: self._move_ee_to_shelf_point(point),
+            lambda: self._release(),
+        )
+
+    def _bbox_to_shelf_point(self, bbox: dict, camera: str) -> np.ndarray:
+        cx = (bbox["x_min"] + bbox["x_max"]) / 2
+        cy = (bbox["y_min"] + bbox["y_max"]) / 2
+
+        cam = self.env.agent.scene.sensors[camera].camera
+        u = cx * cam.width
+        v = cy * cam.height
+
+        return self._unproject_shelf_point(u, v, camera)
+
+    def _move_ee_to_shelf_point(self, point: np.ndarray):
+        shelf_name = self.env.active_shelves[0][0]
+        shelf_pose = self.env.actors["fixtures"]["shelves"][shelf_name].pose.sp
+        shelf_normal = shelf_pose.to_transformation_matrix()[:3, 1]
+        shelf_normal[2] = 0.0
+        shelf_normal = common.np_normalize_vector(shelf_normal)
+
+        target_pose = sapien.Pose(p=point + 0.10 * shelf_normal, q=self._tcp_pose.q)
+        return self._run(
+            self.solver.static_manipulation,
+            target_tcp_pose=target_pose,
+            n_init_qpos=200,
+            disable_lift_joint=False,
+        )
+
+    def _move_ee_to_height(self, z: float):
+        current = self._tcp_pose
+        target_pose = sapien.Pose(p=[current.p[0], current.p[1], z], q=current.q) * sapien.Pose([0, 0, 0.2])
+        return self._run(
+            self.solver.static_manipulation,
+            target_tcp_pose=target_pose,
+            n_init_qpos=200,
+            disable_lift_joint=False,
+        )
+
+    def _move_ee_to_grasp_pose(self, item_id: int):
         """Move end-effector to the grasp pose for an item.
 
         Preconditions:
@@ -107,7 +243,7 @@ class Controller:
             disable_lift_joint=False,
         )
 
-    def move_ee_to_drop_pose(self):
+    def _move_ee_to_drop_pose(self):
         """Move end-effector to a drop pose above the robot's basket.
         
         Effect:
@@ -131,7 +267,7 @@ class Controller:
             disable_lift_joint=False,
         )
 
-    def move_ee_by(self, delta: Sequence[float]):
+    def _move_ee_by(self, delta: Sequence[float]):
         """Move end-effector by a relative offset.
 
         Effect:
@@ -159,7 +295,7 @@ class Controller:
             disable_lift_joint=False,
         )
 
-    def grasp(self, item_id: int):
+    def _grasp(self, item_id: int):
         """Close the gripper to grasp the target product.
 
         Preconditions:
@@ -182,7 +318,7 @@ class Controller:
         self.solver.planner.update_from_simulation()
         return result
 
-    def release(self):
+    def _release(self):
         """Open gripper to release the currently held item.
         
         Effect:
@@ -194,7 +330,7 @@ class Controller:
         """
         return self._run(self.solver.open_gripper)
 
-    def drive_to_shelf(self, distance: float):
+    def _drive_to_shelf(self, distance: float):
         """Drive the robot base to approach the center of the active shelf.
 
         Effect:
@@ -211,7 +347,7 @@ class Controller:
         target = shelf_pose.p - distance * self.env.directions_to_shelf[0]
         return self._run(self.solver.drive_base, target_pos=target)
 
-    def drive_to_product(self, item_id: int, distance: float):
+    def _drive_to_product(self, item_id: int, distance: float):
         """Drive the robot base toward a specific product.
 
         Effect:
@@ -230,7 +366,7 @@ class Controller:
         target_pos = product_pose.p - distance * direction
         return self._run(self.solver.drive_base, target_pos=target_pos)
 
-    def move_base_forward(self, delta: float):
+    def _move_base_forward(self, delta: float):
         """Move the robot base forward or backward by a delta distance.
 
         Effect:
@@ -244,7 +380,7 @@ class Controller:
         """
         return self._run(self.solver.move_forward_delta, delta=delta)
 
-    def rotate_base(self, delta: float):
+    def _rotate_base(self, delta: float):
         """Rotate the robot base around its Z axis.
 
         Effect:
@@ -258,7 +394,7 @@ class Controller:
         """
         return self._run(self.solver.rotate_z_delta, delta=delta)
 
-    def align_to_product(self, item_id: int):
+    def _align_to_product(self, item_id: int):
         """Rotate the robot base to face a product.
 
         Effect:
@@ -271,6 +407,11 @@ class Controller:
         direction = self._product_center(item_id) - self._base_pose.p
         direction[2] = 0.0
         return self._run(self.solver.rotate_base_z, new_direction=direction)
+
+    def _run_sequence(self, *steps):
+        for step in steps:
+            if step() == -1:
+                return -1
 
     def _run(self, fn, **kwargs):
         start = time.time()
@@ -363,36 +504,27 @@ class Controller:
 
         return grasp_pose
 
-    def _unproject_shelf_point(self, u, v):
+    def _unproject_shelf_point(self, u, v, camera="right_base_camera_link"):
         shelf_depth = 0.5
 
-        camera = self.env.agent.scene.sensors['left_base_camera_link'].camera
+        cam = self.env.agent.scene.sensors[camera].camera
 
-        camera_pose = camera.global_pose.sp * sapien.Pose(p=[0, 0, 0], q=[0.5004, -0.5, 0.5, -0.5])
-        camera_pose = camera_pose.to_transformation_matrix()
-        R_cam = camera_pose[:3, :3]
-        t_cam = camera_pose[:3, 3]
-        
-        actor_shelf_name = self.env.active_shelves[0][0]
-        shelf_pose = self.env.actors["fixtures"]["shelves"][actor_shelf_name].pose.sp
+        cam_pose = cam.global_pose.sp * sapien.Pose(p=[0, 0, 0], q=[0.5004, -0.5, 0.5, -0.5])
+        T = cam_pose.to_transformation_matrix()
+        R_cam, t_cam = T[:3, :3], T[:3, 3]
+
+        shelf_name = self.env.active_shelves[0][0]
+        shelf_pose = self.env.actors["fixtures"]["shelves"][shelf_name].pose.sp
         direction_to_shelf = shelf_pose.to_transformation_matrix()[:3, 1]
 
-        t_shelf_plane_world = shelf_pose.p - 0.5 * shelf_depth * direction_to_shelf
-        n_shelf_plane_world = direction_to_shelf.copy()
-
-        t_shelf_plane_cam = R_cam.T @ (t_shelf_plane_world - t_cam)
-        n_shelf_plane_cam = R_cam.T @ n_shelf_plane_world
+        t_plane_world = shelf_pose.p - 0.5 * shelf_depth * direction_to_shelf
+        n_plane_cam = R_cam.T @ direction_to_shelf
+        t_plane_cam = R_cam.T @ (t_plane_world - t_cam)
 
         A = np.array([
-            [camera.fx, 0, camera.cx - u],
-            [0, camera.fy, camera.cy - v],
-            [n_shelf_plane_cam[0], n_shelf_plane_cam[1], n_shelf_plane_cam[2]]
+            [cam.fx, 0,      cam.cx - u],
+            [0,      cam.fy, cam.cy - v],
+            n_plane_cam,
         ])
-        b = np.array([
-            0,
-            0,
-            np.dot(n_shelf_plane_cam, t_shelf_plane_cam)
-        ])
-        X_cam = np.linalg.inv(A) @ b
-        X_world = R_cam @ X_cam + t_cam
-        return X_world
+        b = np.array([0.0, 0.0, np.dot(n_plane_cam, t_plane_cam)])
+        return R_cam @ np.linalg.solve(A, b) + t_cam
