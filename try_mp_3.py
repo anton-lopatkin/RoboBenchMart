@@ -52,9 +52,9 @@ from dsynth.planning.utils import (
     get_fcl_object_name, 
     compute_box_grasp_thin_side_info,
 )
-from dsynth.planning.skills import *
+from dsynth.planning.fetch_skills import *
 
-def solve(env, seed=None, debug=True, vis=False):
+def solve_dummy(env, seed=None, debug=True, vis=False):
     env.reset(seed=seed, options={'reconfigure': True})
     planner = FetchMotionPlanningSapienSolver(
         env,
@@ -76,7 +76,7 @@ def solve(env, seed=None, debug=True, vis=False):
     # res = align_ee_to_target_product(env, planner, target_actor)
     return res
 
-def solve_old(env, seed=None, debug=True, vis=False):
+def solve(env, seed=None, debug=True, vis=False):
     env.reset(seed=seed, options={'reconfigure': True})
     planner = FetchMotionPlanningSapienSolver(
         env,

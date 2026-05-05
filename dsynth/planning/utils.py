@@ -134,6 +134,19 @@ def rodrigues_rotation(v, axis, theta):
              axis * np.dot(axis, v) * (1 - np.cos(theta)))
     return v_rot
 
+def get_tcp_pose(env):
+        return env.agent.tcp.pose
+
+def get_tcp_matrix(env):
+    tcp_pose = get_tcp_pose(env)
+    return tcp_pose.to_transformation_matrix()[0].cpu().numpy()
+
+def get_base_pose(env):
+        return env.agent.base_link.pose
+
+def get_shoulder_pan_pose(env):
+    return env.agent.shoulder_pan_link.pose
+
 def compute_cylinder_grasp_info(
     actor: Actor,
     target_closing=None,
