@@ -6,6 +6,10 @@ from mani_skill.examples.motionplanning.base_motionplanner.utils import (
     compute_grasp_info_by_obb, get_actor_obb)
 
 from dsynth.planning.utils import (
+    get_tcp_pose,
+    get_tcp_matrix,
+    get_base_pose,
+    get_shoulder_pan_pose,
     get_fcl_object_name, 
     compute_box_grasp_thin_side_info,
     compute_cylinder_grasp_info,
@@ -13,19 +17,6 @@ from dsynth.planning.utils import (
 )
 from dsynth.planning.motionplanner import FetchMotionPlanningSapienSolver
 from dsynth.assets.ss_assets import WIDTH, DEPTH
-
-def get_tcp_pose(env):
-        return env.agent.tcp.pose
-
-def get_tcp_matrix(env):
-    tcp_pose = get_tcp_pose(env)
-    return tcp_pose.to_transformation_matrix()[0].cpu().numpy()
-
-def get_base_pose(env):
-        return env.agent.base_link.pose
-
-def get_shoulder_pan_pose(env):
-    return env.agent.shoulder_pan_link.pose
 
 def align_ee_to_target_product(env, planner: FetchMotionPlanningSapienSolver, target_product_actor):
     obb = get_actor_obb(target_product_actor)
@@ -61,10 +52,6 @@ def align_to_target_product(env, planner: FetchMotionPlanningSapienSolver, targe
 
     delta_h = target_product_actor.pose.sp.p[2] - get_tcp_pose(env).sp.p[2]
     res = planner.lift_body(delta_h)
-
-
-    # align to target product
-    # res = align_ee_to_target_product(env, planner, target_product_actor)
 
     return res
 
