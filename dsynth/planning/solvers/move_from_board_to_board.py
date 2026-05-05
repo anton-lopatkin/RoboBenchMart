@@ -43,10 +43,6 @@ from mani_skill.utils import common
 from dsynth.envs import *
 
 from dsynth.planning.motionplanner import (
-    PandaArmMotionPlanningSolverV2, 
-    PandaArmMotionPlanningSapienSolver,
-    FetchStaticArmMotionPlanningSapienSolver,
-    FetchQuasiStaticArmMotionPlanningSapienSolver,
     FetchMotionPlanningSapienSolver
 )
 from dsynth.planning.utils import (
