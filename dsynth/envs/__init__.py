@@ -12,4 +12,4 @@ from dsynth.envs.composite_tasks import *
 
 from dsynth.envs.pickcube_mptest import *
 
-from dsynth.envs.collect_order_items import *
+from dsynth.envs.pick_to_basket_multi import *
