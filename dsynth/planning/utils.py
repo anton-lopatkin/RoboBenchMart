@@ -10,6 +10,7 @@ import os.path as osp
 from pathlib import Path
 import numpy as np
 from transforms3d.euler import euler2quat
+import itertools
 from typing import Callable
 import toppra as ta
 import mplib
@@ -124,6 +125,69 @@ def get_fcl_object_name(entity):
     component = entity._objs[0].find_component_by_type(physx.PhysxRigidBaseComponent)
     return convert_object_name(component.entity)
 
+def rodrigues_rotation(v, axis, theta):
+    axis = axis / np.linalg.norm(axis)  # Ensure unit vector
+    
+    # Rodrigues' formula for vector rotation
+    v_rot = (v * np.cos(theta) + 
+             np.cross(axis, v) * np.sin(theta) + 
+             axis * np.dot(axis, v) * (1 - np.cos(theta)))
+    return v_rot
+
+def compute_cylinder_grasp_info(
+    actor: Actor,
+    target_closing=None,
+    ee_direction=None,
+    depth=0.0,
+    ortho=True,
+    n_grasps_central = 1,
+    n_grasps_lateral = 1,
+    central_angle_range = [-np.pi/4, np.pi/4],
+    lateral_angle_range = [-np.pi/4, np.pi/4],
+):
+    approaching = ee_direction.copy()
+    approaching[2] = 0.
+    approaching = common.np_normalize_vector(approaching)
+    lateral_direction = np.cross(approaching, [0, 0, 1])
+
+    mesh = get_component_mesh(
+        actor._objs[0].find_component_by_type(physx.PhysxRigidDynamicComponent),
+        to_world_frame=True,
+    )
+    assert mesh is not None, "can not get actor mesh for {}".format(actor)
+
+    cylinder: trimesh.primitives.Cylinder = mesh.bounding_cylinder
+    cylinder_obb: trimesh.primitives.Box = cylinder.bounding_box_oriented
+    half_size = cylinder_obb.primitive.extents[0] / 2
+    center = cylinder_obb.primitive.transform[:3, 3]
+
+    central_angles = [0.]
+    if n_grasps_central > 1:
+        central_angles.extend(np.linspace(central_angle_range[0], central_angle_range[1], n_grasps_central - 1))
+
+    lateral_angles = [0.]
+    if n_grasps_lateral > 1:
+        lateral_angles.extend(np.linspace(lateral_angle_range[0], lateral_angle_range[1], n_grasps_lateral - 1))
+
+    grasps = []
+    for central_angle, lateral_angle in itertools.product(central_angles, lateral_angles):
+        approach_vector = rodrigues_rotation(approaching, [0, 0, 1], lateral_angle)
+        approach_vector = rodrigues_rotation(approach_vector, lateral_direction, central_angle)
+        
+        closing = np.cross(approach_vector, [0, 0, 1])
+        closing = common.np_normalize_vector(closing)
+
+        half_size_rot = half_size / np.cos(central_angle)   
+        origin = center + approaching * (-half_size_rot + min(depth, half_size_rot))
+        
+        grasp_info = dict(
+            approaching=approach_vector, closing=closing, center=origin,
+        )
+        grasps.append(grasp_info)
+
+    return grasps
+    
+
 
 def compute_box_grasp_thin_side_info(
     obb: trimesh.primitives.Box,
@@ -131,6 +195,8 @@ def compute_box_grasp_thin_side_info(
     ee_direction=None,
     depth=0.0,
     ortho=True,
+    n_grasps = 1,
+    approaching_angles_range = [-np.pi/4, np.pi/4],
 ):
     """Compute grasp info given an oriented bounding box.
     The grasp info includes axes to define grasp frame, namely approaching, closing, orthogonal directions and center.
@@ -146,36 +212,60 @@ def compute_box_grasp_thin_side_info(
     extents = np.array(obb.primitive.extents)
     T = np.array(obb.primitive.transform)
 
-    inds = np.argsort(extents[:2])
+    for i in range(3):
+        if np.abs(T[:3, i] @ [0, 0, 1]) > 1e-1:
+            height_extent_ids = i
+            break
+
+    inds = np.argsort(extents)
+    inds = inds[inds != height_extent_ids]
     short_base_side_ind = inds[0]
     long_base_side_ind = inds[1]
 
-    height = extents[2]
+    # height = extents[2]
 
-    approaching = np.array(T[:3, long_base_side_ind])
-    approaching = common.np_normalize_vector(approaching)
+    approaching_angles = [0.]
+    if n_grasps > 1:
+        approaching_angles.extend(np.linspace(approaching_angles_range[0], approaching_angles_range[1], n_grasps - 1))
+    
+    approaching_vectors = []
+    default_approaching = np.array(T[:3, long_base_side_ind])
+    default_approaching = common.np_normalize_vector(default_approaching)
 
-    if ee_direction @ approaching < 0:
-        approaching = -approaching
+    if ee_direction @ default_approaching < 0:
+        default_approaching = -default_approaching
+
+    normal_direction = np.cross(default_approaching, [0, 0, 1])
+
+    for approaching_angle in approaching_angles:
+        approaching = rodrigues_rotation(default_approaching, normal_direction, approaching_angle)
+        approaching_vectors.append(approaching)
 
     closing = np.array(T[:3, short_base_side_ind])
-
     if target_closing is not None and target_closing @ closing < 0:
         closing = -closing
-
-    if ortho:
-        closing = closing - (approaching @ closing) * approaching
-        closing = common.np_normalize_vector(closing)
 
     # Find the origin on the surface
     center = T[:3, 3]
     half_size = extents[long_base_side_ind] / 2
-    center = center + approaching * (-half_size + min(depth, half_size))
 
-    grasp_info = dict(
-        approaching=approaching, closing=closing, center=center, extents=extents
-    )
-    return grasp_info
+    grasps = []
+    for approaching, approaching_angle in zip(approaching_vectors, approaching_angles):
+        half_size_rot = half_size / np.cos(approaching_angle)   
+        origin = center + approaching * (-half_size_rot + min(depth, half_size_rot))
+
+        if ortho:
+            cur_closing = closing - (approaching @ closing) * approaching
+            cur_closing = common.np_normalize_vector(cur_closing)
+
+        grasp_info = dict(
+            approaching=approaching, closing=cur_closing, center=origin, extents=extents
+        )
+        grasps.append(grasp_info)
+
+    if len(grasps) == 1:
+        return grasps[0]
+    return grasps
 
 def convert_actor_convex_mesh_to_fcl(actor: Actor):
     component = actor._objs[0].find_component_by_type(physx.PhysxRigidBaseComponent)

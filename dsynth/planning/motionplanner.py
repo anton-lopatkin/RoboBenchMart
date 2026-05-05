@@ -138,92 +138,6 @@ class FetchMotionPlanningSapienSolver:
     def _transform_pose_for_planning(self, target: sapien.Pose) -> sapien.Pose:
         return target
 
-    # def lift_body(self, 
-    #     delta_h = 0.1, 
-    #     abort_when_collision: bool = True, 
-    #     max_abs_delta_control=0.02, 
-    #     tol=1e-2,
-    #     max_stuck_steps: int = 20,
-    #     stuck_tol: float = 1e-3
-    # ):
-    #     LIFT_JOINT_INDEX = 10
-
-    #     current_q_lift_joint = self.robot.get_qpos().cpu().numpy()[0, 3]
-    #     qlimits = self.robot.qlimits[0, 3].cpu().numpy()
-
-    #     target_q_lift_joint = current_q_lift_joint + delta_h
-    #     target_q_lift_joint = np.clip(target_q_lift_joint, qlimits[0], qlimits[1])
-    #     remaining_distance = target_q_lift_joint
-
-    #     true_delta_h = target_q_lift_joint - current_q_lift_joint
-
-    #     last_lift_heights = deque(maxlen=max_stuck_steps)
-
-    #     if self.grasp_pose_visual is not None:
-    #         tcp_pose = self.base_env.agent.tcp.pose.sp
-    #         target_p = tcp_pose.p
-    #         target_p[2] += true_delta_h
-    #         target_tcp_pose = sapien.Pose(p=target_p, q=tcp_pose.q)
-    #         self._update_grasp_visual(target_tcp_pose)
-    #     self.render_wait()
-
-    #     last_error = 0
-    #     error_integral = 0
-    #     dt = 1 / self.base_env.control_freq
-
-    #     arm_action = self.env_agent.controller.controllers['arm'].qpos[0].cpu().numpy()
-    #     body_action = np.zeros(3)
-    #     action = np.hstack([arm_action, self.gripper_state, body_action, [0, 0]])
-
-    #     while True:
-    #         current_q_lift_joint = self.robot.get_qpos().cpu().numpy()[0, 3]
-    #         last_lift_heights.append(current_q_lift_joint)
-
-    #         if len(last_lift_heights) >= max_stuck_steps and np.std(last_lift_heights) < stuck_tol:
-    #             # robot is stuck
-    #             print("Robot is stuck")
-    #             return self.idle_steps(t=1)
-
-    #         current_error = target_q_lift_joint - current_q_lift_joint
-    #         error_diff = (current_error - last_error) / dt
-    #         error_integral += current_error * dt
-    #         # print(current_error, last_error, error_diff)
-
-    #         if np.abs(current_error) < tol and np.abs(error_diff) < 0.1 * tol and \
-    #                 np.abs(self.robot.get_qvel().cpu().numpy()[0, 3]) < tol:
-    #             self.idle_steps(t=200)
-    #             return self.idle_steps(t=1)
-
-    #         last_error = current_error.copy()
-    #         if np.abs(remaining_distance) > max_abs_delta_control:
-    #             control_delta = np.sign(remaining_distance) * max_abs_delta_control
-    #         else:
-    #             control_delta = remaining_distance
-    #         remaining_distance -= control_delta
-            
-    #         action[LIFT_JOINT_INDEX] = control_delta * 10
-    #         print(control_delta, current_error, error_diff)
-    #         obs, reward, terminated, truncated, info = self.env.step(action)
-    #         # self.planner.update_from_simulation()
-    #         self.update_torso_pose()
-
-    #         self.elapsed_steps += 1
-    #         if self.print_env_info:
-    #             print(f"[{self.elapsed_steps:3}] Env Output: reward={reward} info={info}")
-    #         if self.vis:
-    #             self.base_env.render_human()
-
-    #         if abort_when_collision:
-    #             if len(collisions := self.planner.planning_world.check_collision()) > 0:
-    #                 print("Collision detected while lifting body")
-    #                 for collision in collisions:
-    #                         print(
-    #                             f"Collision between {collision.link_name1} of entity "
-    #                             f"{collision.object_name1} with {collision.link_name2} "
-    #                             f"of entity {collision.object_name2}"
-    #                         )
-    #                 return -1         
-
     def lift_body(self, 
         delta_h = 0.1, 
         abort_when_collision: bool = True, 
@@ -324,7 +238,8 @@ class FetchMotionPlanningSapienSolver:
         return base_link_pose.to_transformation_matrix()[:3, 0]
 
     def rotate_base_z(self, 
-        new_direction, 
+        new_direction,
+        arm_actions={"position": [], "velocity": []},
         tol=1e-2, 
         k_p=0.8, 
         k_d=0.01, 
@@ -378,7 +293,7 @@ class FetchMotionPlanningSapienSolver:
                 # robot is stuck
                 print("Robot is stuck")
                 self.planner.update_from_simulation()
-                return self.idle_steps(t=1)
+                return self.idle_steps(t=1), arm_actions
             
             
             if np.cross(cur_x_direction, new_direction)[2] < 0:
@@ -389,12 +304,18 @@ class FetchMotionPlanningSapienSolver:
             
             if np.abs(current_error) < tol and np.abs(error_diff) < tol ** 2:
                 self.planner.update_from_simulation()
-                return self.idle_steps(t=1)
+                return self.idle_steps(t=1), arm_actions
 
 
             control_omega = k_p * current_error + k_d * error_diff
             control_omega = np.clip(control_omega, -max_vel, max_vel)
 
+            if len(arm_actions["position"]) > 0:
+                arm_action = arm_actions["position"][0]
+                arm_actions["position"] = np.delete(arm_actions["position"], 0, axis=0)
+                arm_actions["velocity"] = np.delete(arm_actions["velocity"], 0, axis=0)
+            
+            action[:7] = arm_action
             action[-1] = control_omega
 
             if self.verbose:
@@ -421,13 +342,16 @@ class FetchMotionPlanningSapienSolver:
                                 f"{collision.object_name1} with {collision.link_name2} "
                                 f"of entity {collision.object_name2}"
                             )
-                    return -1
+                    return -1, None
             if n_steps > steps_to_abortion:
                 print("Reached max steps. Something went wrong.")
-                return -1
+                return -1, None
 
     
-    def drive_base(self, target_pos=None, target_view_vec=None):
+    def drive_base(self, target_pos=None, target_view_vec=None, arm_actions=None):
+        if arm_actions is None:
+            arm_actions = {"position": [], "velocity": []}
+        
         if not target_pos is None:
             moving_direction = target_pos - self.base_env.agent.base_link.pose.sp.p
             moving_direction[2] = 0.
@@ -439,22 +363,59 @@ class FetchMotionPlanningSapienSolver:
                 self.planner.update_from_simulation()
 
             else:
-                res = self.rotate_base_z(moving_direction)
+                res, arm_actions = self.rotate_base_z(moving_direction, 
+                    arm_actions=arm_actions)
                 if res == -1:
                     return res
                 self.planner.update_from_simulation()
 
                 delta = np.linalg.norm(moving_direction)
 
-                res = self.move_base_forward_delta(delta)
+                res, arm_actions = self.move_base_forward_delta(delta, 
+                    arm_actions=arm_actions)
                 if res == -1:
                     return res
                 self.planner.update_from_simulation()
         
         # view_direction = target_view_pos.p - self.base_env.agent.base_link.pose.sp.p
         if not target_view_vec is None:
-            res = self.rotate_base_z(target_view_vec)
+            res, arm_actions = self.rotate_base_z(target_view_vec,
+                arm_actions=arm_actions)
+            if res == -1:
+                return res
+
+        if len(arm_actions["position"]) > 0:
+            res = self.follow_path(arm_actions)
+            if res == -1:
+                return res
+        self.planner.update_from_simulation()
+
         return res
+
+    def plan_reset_arm(self):
+        self.planner.update_from_simulation()
+        self.update_torso_pose()
+        current_qpos = self.robot.get_qpos().cpu().numpy()[0, 4:]
+        goal_qpos = [self.env_agent.keyframes['rest'].qpos[4:]]
+        if np.all(np.isclose(goal_qpos, current_qpos)):
+            return {"position": [], "velocity": []}
+        result = self.planner.plan_qpos(
+            goal_qpos,  # type: ignore
+            current_qpos,
+            time_step=0.1,
+            rrt_range=0.1,
+            planning_time=1,
+            fix_joint_limits=True,
+            simplify=True,
+            constraint_function=None,
+            constraint_jacobian=None,
+            constraint_tolerance=1e-3,
+            verbose=self.verbose,
+        )
+        if result["status"] != "Success":
+            return -1
+        return result
+
     
     def base_x_pos(self):
         base_link_pose = self.base_env.agent.base_link.pose.sp
@@ -463,6 +424,7 @@ class FetchMotionPlanningSapienSolver:
     def move_base_forward_delta(
         self, 
         delta, 
+        arm_actions={"position": [], "velocity": []},
         tol=1e-2, 
         k_p=0.8, 
         k_d=0.02, 
@@ -504,15 +466,20 @@ class FetchMotionPlanningSapienSolver:
                 # robot is stuck
                 print("Robot is stuck")
                 self.planner.update_from_simulation()
-                return self.idle_steps(t=1)
+                return self.idle_steps(t=1), arm_actions
 
             if np.abs(current_error) < tol and np.abs(error_diff) < tol ** 2:
                 self.planner.update_from_simulation()
-                return self.idle_steps(t=1)
+                return self.idle_steps(t=1), arm_actions
 
             control_vel = k_p * current_error + k_d * error_diff
             control_vel = np.clip(control_vel, -max_vel, max_vel)
 
+            if len(arm_actions["position"]) > 0:
+                arm_action = arm_actions["position"][0]
+                arm_actions["position"] = np.delete(arm_actions["position"], 0, axis=0)
+                arm_actions["velocity"] = np.delete(arm_actions["velocity"], 0, axis=0)
+            action[:7] = arm_action
             action[-2] = control_vel
 
             if self.verbose:
@@ -540,10 +507,10 @@ class FetchMotionPlanningSapienSolver:
                                 f"{collision.object_name1} with {collision.link_name2} "
                                 f"of entity {collision.object_name2}"
                             )
-                    return -1
+                    return -1, None
             if n_steps > steps_to_abortion:
                 print("Reached max steps. Something went wrong.")
-                return -1
+                return -1, None
     
                 
     def follow_path(self, result, refine_steps: int = 0):
@@ -656,42 +623,13 @@ class FetchMotionPlanningSapienSolver:
             return result
         return self.follow_path(result, refine_steps=refine_steps)
 
-    # def add_box_collision(self, extents: np.ndarray, pose: sapien.Pose):
-    #     self.use_point_cloud = True
-    #     box = trimesh.creation.box(extents, transform=pose.to_transformation_matrix())
-    #     pts, _ = trimesh.sample.sample_surface(box, 1024)
-    #     if self.all_collision_pts is None:
-    #         self.all_collision_pts = pts
-    #     else:
-    #         self.all_collision_pts = np.vstack([self.all_collision_pts, pts])
-    #     self.planner.update_point_cloud(self.all_collision_pts)
-
-        # pc = trimesh.points.PointCloud(pts)
-        # scene = trimesh.Scene([pc])
-        # scene.show()
-
-    #==========================================#
     def open_gripper(self, t=6, gripper_state=None):
-        if gripper_state is None:
-            gripper_state = self.OPEN
-        self.gripper_state = gripper_state
-        qpos = self.robot.get_qpos()[0, : len(self.planner.joint_vel_limits)].cpu().numpy()
-        for i in range(t):
-            if self.control_mode == "pd_joint_pos":
-                action = np.hstack([qpos, self.gripper_state])
-            else:
-                action = np.hstack([qpos, qpos * 0, self.gripper_state])
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            self.elapsed_steps += 1
-            if self.print_env_info:
-                print(
-                    f"[{self.elapsed_steps:3}] Env Output: reward={reward} info={info}"
-                )
-            if self.vis:
-                self.base_env.render_human()
-        return obs, reward, terminated, truncated, info
+        return self.change_gripper_state(t=t, gripper_state=self.OPEN)
 
     def close_gripper(self, t=6, gripper_state=None):
+        return self.change_gripper_state(t=t, gripper_state=self.CLOSED)
+
+    def change_gripper_state(self, t=6, gripper_state=None):
         if gripper_state is None:
             gripper_state = self.CLOSED
         self.gripper_state = gripper_state

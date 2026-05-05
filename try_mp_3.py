@@ -52,6 +52,7 @@ from dsynth.planning.utils import (
     get_fcl_object_name, 
     compute_box_grasp_thin_side_info,
 )
+from dsynth.planning.skills import *
 
 def solve(env, seed=None, debug=True, vis=False):
     env.reset(seed=seed, options={'reconfigure': True})
@@ -67,116 +68,59 @@ def solve(env, seed=None, debug=True, vis=False):
 
     FINGER_LENGTH = 0.1
     env = env.unwrapped
-
-    def get_tcp_pose():
-        return env.agent.tcp.pose
-
-    def get_tcp_matrix():
-        tcp_pose = get_tcp_pose()
-        return tcp_pose.to_transformation_matrix()[0].cpu().numpy()
-
-    # planner.add_box_collision(env.wall.get_collision_meshes()[0].extents, env.wall.pose.sp)
-    target_actor = env.actors['products']['[ENV#0]_food.dairy_products.milkCarton:0:2:4:0']
-    # retrieves the object oriented bounding box (trimesh box object)
-    obb = get_actor_obb(target_actor)
-
-    grasp_info = compute_box_grasp_thin_side_info(
-        obb,
-        target_closing=get_tcp_matrix()[:3, 1],
-        ee_direction=get_tcp_matrix()[:3, 2],
-        depth=FINGER_LENGTH,
-    )
-    grasp_closing, grasp_center, grasp_approaching = grasp_info["closing"], grasp_info["center"], grasp_info["approaching"]
-    # get transformation matrix of the tcp pose, is default batched and on torch
-    target_closing = env.agent.tcp.pose.to_transformation_matrix()[0, :3, 1].cpu().numpy()
-    grasp_pose = env.agent.build_grasp_pose(grasp_approaching, grasp_closing, grasp_center)
-    pre_grasp_pose = grasp_pose * sapien.Pose([0, 0, -0.15])
-
-    dir_to_shelf = env.directions_to_shelf[0]
-    
-
-    # -------------------------------------------------------------------------- # # -------------------------------------------------------------------------- #
-    # Reach
-    # -------------------------------------------------------------------------- #
-    base_pos_near_target = pre_grasp_pose.p - 1 * dir_to_shelf
-    base_pos_near_target[2] = 0
-    res = planner.drive_base(base_pos_near_target, dir_to_shelf)
+    target_actor = env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:3:0']
+    res = align_to_target_product(env, planner, target_actor)
     if res == -1:
         return res
 
-    delta_h = pre_grasp_pose.p[2] - get_tcp_pose().sp.p[2]
-    planner.lift_body(delta_h)
-    
-    # -------------------------------------------------------------------------- #
-    # Reach
-    # -------------------------------------------------------------------------- #
-    # reach_pose = env.agent.tcp.pose.sp * sapien.Pose([-0.15, 0, -0.0])
-    # planner.move_to_pose_with_screw(reach_pose)
-    planner.static_manipulation(pre_grasp_pose)
-
-    # -------------------------------------------------------------------------- #
-    # Grasp
-    # -------------------------------------------------------------------------- #
-    # planner.move_to_pose_with_screw(grasp_pose)
-    planner.planner.planning_world.get_allowed_collision_matrix().set_default_entry(
-        get_fcl_object_name(target_actor), True
-    )
-
-    for i in range(3):
-        if not planner.check_IK(grasp_pose):
-            res = planner.move_base_forward_delta(0.05)
-            delta_h += 0.05
-            if res == -1:
-                return res
-        else:
-            break
-    planner.static_manipulation(grasp_pose)
-    planner.close_gripper()
-
-    res = planner.move_base_forward_delta(-delta_h)
-    if res == -1:
-        return res
-
-    # -------------------------------------------------------------------------- #
-    # Move to goal pose
-    # -------------------------------------------------------------------------- #
-    goal_center = env.calc_target_pose().sp.p
-    goal_center = goal_center + np.array([0.1, 0., 0.2]) # add shift from base to basket
-
-    goal_approaching = np.array([0, 0., -1.])
-    goal_closing = - get_base_pose().sp.to_transformation_matrix()[:3, 1]
-
-    goal_pose = env.agent.build_grasp_pose(goal_approaching, goal_closing, goal_center)
-    planner.open_gripper()
-    # planner.close()
+    # res = align_ee_to_target_product(env, planner, target_actor)
     return res
 
+def solve_old(env, seed=None, debug=True, vis=False):
+    env.reset(seed=seed, options={'reconfigure': True})
+    planner = FetchMotionPlanningSapienSolver(
+        env,
+        debug=debug,
+        vis=vis,
+        # base_pose=env.unwrapped.agent.robot.pose,
+        visualize_target_grasp_pose=vis,
+        print_env_info=False,
+        verbose=True,
+    )
 
+    FINGER_LENGTH = 0.1
+    env = env.unwrapped
+    target_actors = [
+        env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:3:0'],
+        env.actors['products']['[ENV#0]_food.CRACKERS_COOKIES.OreoLemonCremeSandwichCookies:0:1:2:0'],
+        env.actors['products']['[ENV#0]_food.CEREALS.NestleFitnessChocolateCereals:0:2:1:0'],
+        env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:2:0'],
+        env.actors['products']['[ENV#0]_food.dairy_products.milkCarton:0:3:2:0'],
+        # env.actors['products']['[ENV#0]_food.HOUSEHOLD.AceDetergent:0:4:2:0']
+    ]
+    # target_actor = env.actors['products']['[ENV#0]_food.dairy_products.milkCarton:0:2:4:0']
+    for target_actor in target_actors:
+        res = align_to_target_product(env, planner, target_actor)
+        if res == -1:
+            return res
+        
+        res = fetch_object_from_shelf(env, planner, target_actor, n_grasps=6, num_tries=5)
+        if res == -1:
+            return res
 
-# def parse_args(args=None):
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("-e", "--env-id", type=str, default="PickCube-v1", help=f"Environment to run motion planning solver on. Available options are {list(MP_SOLUTIONS.keys())}")
-#     parser.add_argument("-o", "--obs-mode", type=str, default="none", help="Observation mode to use. Usually this is kept as 'none' as observations are not necesary to be stored, they can be replayed later via the mani_skill.trajectory.replay_trajectory script.")
-#     parser.add_argument("-n", "--num-traj", type=int, default=10, help="Number of trajectories to generate.")
-#     parser.add_argument("--only-count-success", action="store_true", help="If true, generates trajectories until num_traj of them are successful and only saves the successful trajectories/videos")
-#     parser.add_argument("--reward-mode", type=str)
-#     parser.add_argument("-b", "--sim-backend", type=str, default="auto", help="Which simulation backend to use. Can be 'auto', 'cpu', 'gpu'")
-#     parser.add_argument("--render-mode", type=str, default="rgb_array", help="can be 'sensors' or 'rgb_array' which only affect what is saved to videos")
-#     parser.add_argument("--vis", action="store_true", help="whether or not to open a GUI to visualize the solution live")
-#     parser.add_argument("--save-video", action="store_true", help="whether or not to save videos locally")
-#     parser.add_argument("--traj-name", type=str, help="The name of the trajectory .h5 file that will be created.")
-#     parser.add_argument("--shader", default="default", type=str, help="Change shader used for rendering. Default is 'default' which is very fast. Can also be 'rt' for ray tracing and generating photo-realistic renders. Can also be 'rt-fast' for a faster but lower quality ray-traced renderer")
-#     parser.add_argument("--record-dir", type=str, default="demos", help="where to save the recorded trajectories")
-#     parser.add_argument("--num-procs", type=int, default=1, help="Number of processes to use to help parallelize the trajectory replay process. This uses CPU multiprocessing and only works with the CPU simulation backend at the moment.")
-#     return parser.parse_args()
-
+        res = drop_to_basket(env, planner)
+        if res == -1:
+            return res
+            
+    return res
+    
 def _main(proc_id: int = 0, start_seed: int = 0) -> str:
-    env_id = 'DarkstoreContinuousBaseEnv'
+    env_id = 'PickToBasketContEnv'
     env = gym.make(
         env_id,
-        obs_mode='none',
+        obs_mode='state',
         robot_uids='ds_fetch_basket',
-        config_dir_path = 'generated_envs/ds_small_scene/',
+        config_dir_path = 'generated_envs/ds_small_scene2/',
         control_mode="pd_joint_pos",
         render_mode="human",
         sensor_configs=dict(shader_pack='default'),
@@ -206,9 +150,9 @@ def _main(proc_id: int = 0, start_seed: int = 0) -> str:
     output_h5_path = env._h5_file.filename
     # solve = MP_SOLUTIONS[env_id]
     print(f"Motion Planning Running on {env_id}")
-    num_traj = 10
+    num_traj = 1
     vis = True
-    only_count_success = True
+    only_count_success = False
     pbar = tqdm(range(num_traj), desc=f"proc_id: {proc_id}")
     seed = start_seed
     successes = []
@@ -217,7 +161,7 @@ def _main(proc_id: int = 0, start_seed: int = 0) -> str:
     passed = 0
     while True:
         #try:
-        res = solve(env, seed=seed, debug=True, vis=True if vis else False)
+        res = solve(env, seed=seed, debug=False, vis=True if vis else False)
         # except Exception as e:
         #     print(f"Cannot find valid solution because of an error in motion planning solution: {e}")
         #     res = -1
