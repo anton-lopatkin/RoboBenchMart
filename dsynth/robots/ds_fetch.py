@@ -2,7 +2,7 @@ from copy import deepcopy
 from transforms3d import euler
 import numpy as np
 import sapien
-
+from mani_skill.utils import sapien_utils
 from mani_skill.agents.base_agent import Keyframe
 from mani_skill.agents.controllers import *
 from mani_skill.agents.registration import register_agent
@@ -10,6 +10,7 @@ from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils.structs import Pose
 from mani_skill.agents.robots.fetch.fetch import Fetch
 from mani_skill.agents.base_agent import BaseAgent
+from mani_skill.utils.structs.link import Link
 from dsynth import PACKAGE_DIR
 
 @register_agent()
@@ -18,6 +19,13 @@ class DSFetchBasket(Fetch):
     urdf_path = f"{PACKAGE_DIR}/assets/urdf/fetch/fetch_basket.urdf"
     urdf_arm_ik_path = f"{PACKAGE_DIR}/assets/urdf/fetch/fetch_torso_up.urdf"
 
+    keyframes = dict(
+        rest=Keyframe(
+            pose=sapien.Pose(),
+            qpos=np.array([0, 0, 0, 0.386, 0, 0, 0, -np.pi / 4, 0, np.pi / 4, 0, np.pi / 3, 0, 0.015, 0.015,]),  # fmt: skip
+        )
+    )
+    
     @property
     def _sensor_configs(self):
         return [
@@ -89,11 +97,36 @@ class DSFetchBasket(Fetch):
             normalize_action=False,
             use_target=True
         )
+        # arm_pd_ee_delta_pose = PDEEPoseControllerConfig(
+        #     joint_names=self.arm_joint_names,
+        #     pos_lower=-0.1,
+        #     pos_upper=0.1,
+        #     rot_lower=-0.1,
+        #     rot_upper=0.1,
+        #     stiffness=self.arm_stiffness,
+        #     damping=self.arm_damping,
+        #     force_limit=self.arm_force_limit,
+        #     ee_link=self.ee_link_name,
+        #     urdf_path=self.urdf_arm_ik_path,
+        #     root_link_name="torso_lift_link",
+        #     use_target=False,
+        #     use_delta=True,
+        #     # frame="body_translation:body_aligned_body_rotation",
+        # )
 
         controller_configs['pd_joint_pos']['body'] = body_pd_joint_pos
+        # controller_configs['pd_ee_delta_pose']['arm'] = arm_pd_ee_delta_pose
+        controller_configs['pd_ee_delta_pose']['body'] = body_pd_joint_pos
+        controller_configs['pd_ee_target_delta_pose']['body'] = body_pd_joint_pos
 
         return deepcopy_dict(controller_configs)
 
+    def _after_init(self):
+        super()._after_init()
+        self.shoulder_pan_link: Link = sapien_utils.get_obj_by_name(
+            self.robot.get_links(), "shoulder_pan_link"
+        )
+        
 # @register_agent()
 # class DSFetch(Fetch):
 #     uid = "ds_fetch"

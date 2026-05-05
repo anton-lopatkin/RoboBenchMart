@@ -247,22 +247,22 @@ class DarkstoreContinuousBaseEnv(DarkstoreCellBaseEnv):
         elif self.robot_uids in ["fetch", "ds_fetch", "ds_fetch_basket"]:
             qpos = np.array(
                 [
-                    0,
-                    0,
-                    0,
-                    0.36,
-                    0, #unused
-                    0,
-                    0, #unused
-                    0.75,
-                    0,
-                    0.81,
-                    0,
-                    -0.78,
-                    0,
-                    0.015,
-                    0.015,
-                ]
+                        0,
+                        0,
+                        0,
+                        0.0,#386,
+                        0,
+                        0,
+                        0,
+                        -np.pi / 4,
+                        0,
+                        np.pi / 4,
+                        0,
+                        np.pi / 3,
+                        0,
+                        0.015,
+                        0.015,
+                    ]
             )
             self.agent.reset(qpos)
             self.agent.robot.set_pose(Pose.create_from_pq(p=self.robot_origins, q=quats))
