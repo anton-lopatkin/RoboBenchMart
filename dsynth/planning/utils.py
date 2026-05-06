@@ -49,6 +49,8 @@ from mani_skill.examples.motionplanning.panda.motionplanner import \
 from mani_skill.utils import common
 from mani_skill.utils.structs import Actor
 
+from dsynth.assets.ss_assets import WIDTH, DEPTH
+
 BAD_ENV_ERROR_CODE = -1234
 
 def attach_object(  # type: ignore
@@ -135,17 +137,28 @@ def rodrigues_rotation(v, axis, theta):
     return v_rot
 
 def get_tcp_pose(env):
-        return env.agent.tcp.pose
+    return env.agent.tcp.pose.sp
 
 def get_tcp_matrix(env):
     tcp_pose = get_tcp_pose(env)
-    return tcp_pose.to_transformation_matrix()[0].cpu().numpy()
+    return tcp_pose.to_transformation_matrix()
 
 def get_base_pose(env):
         return env.agent.base_link.pose
 
 def get_shoulder_pan_pose(env):
     return env.agent.shoulder_pan_link.pose
+
+def get_base_shift_tcp_to_target(env, target_pos: np.ndarray):
+    dist_to_target = get_tcp_pose(env).p - target_pos
+    dist_to_target[2] = 0
+    return np.linalg.norm(dist_to_target)
+
+def get_direction_to_shelf(env):
+    actor_shelf_name = env.active_shelves[0][0]
+    shelf_pos = env.actors["fixtures"]["shelves"][actor_shelf_name].pose.sp.p
+    shelf_direction = env.directions_to_shelf[0]
+    return np.abs((get_tcp_pose(env).p - shelf_pos) @ shelf_direction) - DEPTH / 2
 
 def compute_cylinder_grasp_info(
     actor: Actor,
