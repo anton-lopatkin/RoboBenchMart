@@ -241,9 +241,9 @@ class FetchMotionPlanningSapienSolver:
         new_direction,
         arm_actions={"position": [], "velocity": []},
         tol=1e-2, 
-        k_p=0.8, 
+        k_p=1.7, 
         k_d=0.01, 
-        max_vel=0.5,
+        max_vel=0.8,
         max_stuck_steps: int = 20,
         stuck_tol: float = 1e-3,
         abort_when_collision: bool = True,
@@ -426,9 +426,9 @@ class FetchMotionPlanningSapienSolver:
         delta, 
         arm_actions={"position": [], "velocity": []},
         tol=1e-2, 
-        k_p=0.8, 
+        k_p=1.7, 
         k_d=0.02, 
-        max_vel=0.6,
+        max_vel=0.8,
         max_stuck_steps: int = 20,
         stuck_tol: float = 1e-3,
         abort_when_collision: bool = True,
@@ -468,7 +468,7 @@ class FetchMotionPlanningSapienSolver:
                 self.planner.update_from_simulation()
                 return self.idle_steps(t=1), arm_actions
 
-            if np.abs(current_error) < tol and np.abs(error_diff) < tol ** 2:
+            if np.abs(current_error) < tol:# and np.abs(error_diff) < tol:
                 self.planner.update_from_simulation()
                 return self.idle_steps(t=1), arm_actions
 

@@ -13,17 +13,16 @@ from dsynth.planning.utils import (
     get_fcl_object_name, 
     compute_box_grasp_thin_side_info,
     compute_cylinder_grasp_info,
-    is_mesh_cylindrical
+    is_mesh_cylindrical,
+    get_base_shift_tcp_to_target,
+    get_direction_to_shelf
 )
 from dsynth.planning.motionplanner import FetchMotionPlanningSapienSolver
-from dsynth.assets.ss_assets import WIDTH, DEPTH
 
-def align_ee_to_target_product(env, planner: FetchMotionPlanningSapienSolver, target_product_actor):
-    obb = get_actor_obb(target_product_actor)
-    item_center = np.array(obb.primitive.transform)[:3, 3]
+def align_ee_to_target_pos(env, planner: FetchMotionPlanningSapienSolver, target_pos: np.ndarray):
     shoulder_pos = get_shoulder_pan_pose(env).sp.p
-    shoulder_to_tcp_distance = np.linalg.norm(shoulder_pos - get_tcp_pose(env).sp.p)
-    shoulder_to_item_direction = (item_center - shoulder_pos)
+    shoulder_to_tcp_distance = np.linalg.norm(shoulder_pos - get_tcp_pose(env).p)
+    shoulder_to_item_direction = (target_pos - shoulder_pos)
     shoulder_to_item_direction = common.np_normalize_vector(shoulder_to_item_direction)
     target_tcp_pos = shoulder_pos + shoulder_to_item_direction * shoulder_to_tcp_distance
 
@@ -34,40 +33,92 @@ def align_ee_to_target_product(env, planner: FetchMotionPlanningSapienSolver, ta
     res = planner.static_manipulation(target_tcp_pose)
     return res
 
-def align_to_target_product(env, planner: FetchMotionPlanningSapienSolver, target_product_actor):
-    FINGER_LENGTH = 0.03
+def align_ee_to_target_product(env, planner: FetchMotionPlanningSapienSolver, target_product_actor):
+    obb = get_actor_obb(target_product_actor)
+    item_center = np.array(obb.primitive.transform)[:3, 3]
+    res = align_ee_to_target_pos(env, planner, item_center)
+    return res
+
+def align_to_target_pose(env, planner: FetchMotionPlanningSapienSolver, pose: sapien.Pose):
 
     reset_arm_actions = planner.plan_reset_arm()
     if reset_arm_actions == -1:
         reset_arm_actions = None
 
     dir_to_shelf = env.directions_to_shelf[0]
-    # base_to_tcp_distance = np.linalg.norm(get_tcp_pose(env).sp.p - get_base_pose(env).sp.p)
-    base_pos_near_target = target_product_actor.pose.sp.p - 1.35 * dir_to_shelf
+    # base_to_tcp_distance = np.linalg.norm(get_tcp_pose(env).p - get_base_pose(env).sp.p)
+    base_pos_near_target = pose.p - 1.35 * dir_to_shelf
 
     base_pos_near_target[2] = 0
     res = planner.drive_base(base_pos_near_target, dir_to_shelf, arm_actions=reset_arm_actions)
     if res == -1:
         return res
 
-    delta_h = target_product_actor.pose.sp.p[2] - get_tcp_pose(env).sp.p[2]
+    delta_h = pose.p[2] - get_tcp_pose(env).p[2]
     res = planner.lift_body(delta_h)
-
     return res
 
-def get_distance_to_target(env, target_product_actor):
-    dist_to_target = get_tcp_pose(env).sp.p - target_product_actor.pose.sp.p
-    dist_to_target[2] = 0
-    return np.linalg.norm(dist_to_target)
 
-def get_direction_to_shelf(env):
-    actor_shelf_name = env.active_shelves[0][0]
-    shelf_pos = env.actors["fixtures"]["shelves"][actor_shelf_name].pose.sp.p
-    shelf_direction = env.directions_to_shelf[0]
-    return np.abs((get_tcp_pose(env).sp.p - shelf_pos) @ shelf_direction) - DEPTH / 2
+def align_to_target_product(env, planner: FetchMotionPlanningSapienSolver, target_product_actor):
+    return align_to_target_pose(env, planner, target_product_actor.pose.sp)
 
+def approach_and_manipulate_to_pose_in_shelf(
+    env, 
+    planner: FetchMotionPlanningSapienSolver,
+    target_center_pos: np.ndarray,
+    target_poses_list: list[sapien.Pose],
+    num_tries = 5,
+    last_resort_pregrasp_approach_distance = 0.15,
+):
+    success = False
+    # delta_approach = 0
 
+    res = align_ee_to_target_pos(env, planner, target_center_pos)
+    if res == -1:
+        return res
 
+    for tries in range(num_tries):
+        ik_solvable_graps = []
+
+        for grasp in target_poses_list:
+            planner._update_grasp_visual(grasp)
+            planner.update_torso_pose()
+            # planner.render_wait()
+            if planner.check_IK(grasp):
+                # dist_to_target = get_base_shift_tcp_to_target(env, target_center_pos)
+                res = planner.static_manipulation(grasp)
+                if res != -1:
+                    # delta_approach += dist_to_target
+                    success = True
+                    break
+                ik_solvable_graps.append(grasp)
+
+        if success:
+            break
+
+        if len(ik_solvable_graps) > 0: # try to approach closer if ik is solvable
+            for solvable_grasp in ik_solvable_graps:
+                last_resort_approach_pose = solvable_grasp * sapien.Pose([0, 0, -last_resort_pregrasp_approach_distance])
+                if planner.check_IK(last_resort_approach_pose):
+                    # dist_to_target = get_base_shift_tcp_to_target(env, target_center_pos)
+                    res = planner.static_manipulation(last_resort_approach_pose)
+                    if res != -1:
+                        # delta_approach += dist_to_target
+                        break
+
+        dist_to_shelf = get_direction_to_shelf(env)
+        res, _ = planner.move_base_forward_delta(dist_to_shelf / 2)
+        if res == -1:
+            return res
+        # delta_approach += dist_to_shelf / 2
+
+        res = align_ee_to_target_pos(env, planner, target_center_pos)
+        if res == -1:
+            return res
+    if not success:
+        return -1
+
+    return res
 
 def fetch_object_from_shelf(
     env, 
@@ -80,6 +131,7 @@ def fetch_object_from_shelf(
 ):
     FINGER_LENGTH = 0.03
     obb = get_actor_obb(target_product_actor)
+    target_center_pos = np.array(obb.primitive.transform)[:3, 3]
 
     if is_mesh_cylindrical(target_product_actor):
         grasp_infos = compute_cylinder_grasp_info(
@@ -111,56 +163,18 @@ def fetch_object_from_shelf(
     )
     planner.planner.update_from_simulation()
 
-    success = False
-    delta_approach = 0
+    start_tcp_pos = get_tcp_pose(env).p
 
-
-    for tries in range(num_tries):
-        ik_solvable_graps = []
-
-        for grasp in grasps:
-            planner._update_grasp_visual(grasp)
-            planner.update_torso_pose()
-            # planner.render_wait()
-            if planner.check_IK(grasp):
-                dist_to_target = get_distance_to_target(env, target_product_actor)
-                res = planner.static_manipulation(grasp)
-                if res != -1:
-                    delta_approach += dist_to_target
-                    success = True
-                    break
-                ik_solvable_graps.append(grasp)
-
-        if success:
-            break
-
-        if len(ik_solvable_graps) > 0: # try to approach closer if ik is solvable
-            for solvable_grasp in ik_solvable_graps:
-                last_resort_approach_pose = solvable_grasp * sapien.Pose([0, 0, -last_resort_pregrasp_approach_distance])
-                if planner.check_IK(last_resort_approach_pose):
-                    dist_to_target = get_distance_to_target(env, target_product_actor)
-                    res = planner.static_manipulation(last_resort_approach_pose)
-                    if res != -1:
-                        delta_approach += dist_to_target
-                        break
-
-
-        dist_to_shelf = get_direction_to_shelf(env)
-        # if dist_to_shelf > approach_distance:
-        #     cur_delta = approach_distance
-        # else:
-        #     cur_delta = dist_to_shelf / 2
-        res, _ = planner.move_base_forward_delta(dist_to_shelf / 2)
-        if res == -1:
-            return res
-        delta_approach += dist_to_shelf / 2
-
-        res = align_ee_to_target_product(env, planner, target_product_actor)
-        if res == -1:
-            return res
-
-    if not success:
-        return -1
+    res = approach_and_manipulate_to_pose_in_shelf(
+        env, 
+        planner, 
+        target_center_pos, 
+        grasps, 
+        num_tries=num_tries, 
+        last_resort_pregrasp_approach_distance=last_resort_pregrasp_approach_distance,
+    )
+    if res == -1:
+        return res
 
     res = planner.close_gripper()
     if res == -1:
@@ -168,6 +182,11 @@ def fetch_object_from_shelf(
     res = planner.lift_body(0.05)
     if res == -1:
         return res
+
+    delta_approach = start_tcp_pos - get_tcp_pose(env).p
+    delta_approach[2] = 0
+    delta_approach = np.linalg.norm(delta_approach)
+
     res = planner.move_base_forward_delta(-delta_approach)
     if res == -1:
         return res
