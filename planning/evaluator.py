@@ -56,11 +56,13 @@ class Evaluator:
 
             reset_options = {"reconfigure": True}
             if robot_init_pose_start_seed is not None:
-                reset_options["robot_init_pose_seed"] = robot_init_pose_start_seed + episode
+                reset_options["robot_init_pose_seed"] = (
+                    robot_init_pose_start_seed + episode
+                )
 
             env.reset(seed=seed, options=reset_options)
 
-            instruction = env.language_instructions[0]
+            instruction = "take 3 beers" # "take beer 98 and place it near the milk"  # env.language_instructions[0]
             controller = Controller(env, debug=self.debug, vis=self.vis)
             agent = DarkstoreAgent(
                 model,

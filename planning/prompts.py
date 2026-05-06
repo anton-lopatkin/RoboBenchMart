@@ -17,12 +17,7 @@ You will receive the following input:
             - "product_id" — unique numeric identifier (exactly matches the number shown on the annotated image)
             - "product_name" — the name of the product
     - History: a log of all skills executed so far with their motion planning outcomes.
-    - Reflection: an independent assessment of the true current state of the task.
-    Use it to catch silent failures — cases where motion planning succeeded but the skill did not achieve its intended effect.
-
-Task Requirements:
-Based on the image and language inputs, generate next skill call to achieve task goal. 
-Each skill call should contain the skill name and the skill parameters (if the skill requires parameters).
+    - Reflection (optional): an independent assessment of whether the trajectory is on track. Use it to detect cycles or silent failures.
 
 Task Instruction:
 {instruction}
@@ -30,21 +25,27 @@ Task Instruction:
 Available Skills:
 {skills}
 
-Output Format: 
-{{"name": "skill_name_1", "params": {{"parameter": value}}}}
+Your response must follow this format:
+
+(Previous action verification)
+Carefully analyze the images and scene description to determine whether the previous action achieved its intended effect. If no action has been taken yet, write "No previous action."
+
+(Scene Analysis)
+Briefly describe the current state of the scene relevant to the task.
+
+(Next Action)
+Decide on the next skill to call and explain why.
+
+{{"name": "skill_name", "params": {{"parameter": value}}}}
 """
 
-PLANNER_USER_PROMPT = """
-Scene Description:
+PLANNER_USER_PROMPT = """{reflection_prefix}Scene Description:
 {scene_description}
 
 History:
 {history}
 
-Reflection:
-{reflection}
-
-Generate a skill call and return nothing except the skill in the specified format.
+Generate your response in the required format.
 """
 
 REFLECTOR_SYSTEM_PROMPT = """

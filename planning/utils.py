@@ -1,9 +1,10 @@
+import base64
+import inspect
 from typing import Any, Dict, List, Optional
 
-import base64
 import cv2
-import inspect
 import numpy as np
+
 from dsynth.envs import DarkstoreContinuousBaseEnv
 
 
@@ -24,9 +25,7 @@ def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
         image = cv2.resize(
             image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR
         )
-        seg = cv2.resize(
-            seg, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST
-        )
+        seg = cv2.resize(seg, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
 
         annotated_image = annotate_image(image, seg, env)
 
@@ -73,7 +72,7 @@ def get_robot_description(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
                 "limits": [round(x, 3) for x in joint.limits[0].numpy()],
             }
             for joint in env.unwrapped.agent.robot.active_joints
-            if not "root" in joint.name
+            if "root" not in joint.name
         ],
     }
 
@@ -220,9 +219,7 @@ def build_skills_description(controller_cls) -> str:
 
 
 def draw_normalized_bbox(
-    image: np.ndarray, 
-    bbox: dict, color: tuple = (0, 255, 0), 
-    thickness: int = 2
+    image: np.ndarray, bbox: dict, color: tuple = (0, 255, 0), thickness: int = 2
 ) -> np.ndarray:
     h, w = image.shape[:2]
     pt1 = (int(bbox["x_min"] * w), int(bbox["y_min"] * h))
