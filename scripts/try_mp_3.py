@@ -11,6 +11,8 @@ import os.path as osp
 from pathlib import Path
 from transforms3d.euler import euler2quat
 import sapien
+import sys
+sys.path.append('.')
 from mani_skill.utils.building.ground import build_ground
 from mani_skill import PACKAGE_DIR
 from mani_skill.utils.wrappers.record import RecordEpisode
@@ -76,6 +78,53 @@ def solve_dummy(env, seed=None, debug=True, vis=False):
     # res = align_ee_to_target_product(env, planner, target_actor)
     return res
 
+def solve_new(env, seed=None, debug=True, vis=False):
+    env.reset(seed=seed, options={'reconfigure': True})
+    planner = FetchMotionPlanningSapienSolver(
+        env,
+        debug=debug,
+        vis=vis,
+        # base_pose=env.unwrapped.agent.robot.pose,
+        visualize_target_grasp_pose=vis,
+        print_env_info=True,
+        verbose=True,
+    )
+
+    env = env.unwrapped
+    target_actors = [
+        # env.actors['products']['[ENV#0]_food.dairy_products.milkCarton:0:3:2:0'],
+        env.actors['products']['[ENV#0]_food.CEREALS.NestleFitnessChocolateCereals:0:2:1:0'],
+        env.actors['products']['[ENV#0]_food.CRACKERS_COOKIES.OreoLemonCremeSandwichCookies:0:1:2:0'],
+        env.actors['products']['[ENV#0]_food.BEER.DuffBeerCan:0:0:3:0'],
+    ]
+
+    for target_actor in target_actors:
+        obb = get_actor_obb(target_actor)
+        target_actor_pose_init = sapien.Pose(p=target_actor.pose.sp.p, q=target_actor.pose.sp.q)
+        target_center = np.array(obb.primitive.transform)[:3, 3]
+        target_center[2] += 0.47
+        direction = env.directions_to_shelf[0]
+        closing = np.cross(direction, [0., 0., 1.])
+        target_pose = env.agent.build_grasp_pose(direction, closing, target_center)
+        # target_pose = sapien.Pose(p=target_center, q=target_actor.pose.sp.q)
+
+        res = align_to_target_product(env, planner, target_actor)
+        if res == -1:
+            return res
+        
+        res = fetch_object_from_shelf(env, planner, target_actor, n_grasps=10, num_tries=5)
+        if res == -1:
+            return res
+
+        res = align_to_target_pose(env, planner, target_pose)
+        if res == -1:
+            planner.render_wait()
+            return res
+
+        res = place_object_to_pos(env, planner, target_center, env.directions_to_shelf[0], n_grasps=10)
+        if res == -1:
+            return res
+
 def solve(env, seed=None, debug=True, vis=False):
     env.reset(seed=seed, options={'reconfigure': True})
     planner = FetchMotionPlanningSapienSolver(
@@ -84,17 +133,17 @@ def solve(env, seed=None, debug=True, vis=False):
         vis=vis,
         # base_pose=env.unwrapped.agent.robot.pose,
         visualize_target_grasp_pose=vis,
-        print_env_info=False,
-        verbose=True,
+        print_env_info=True,
+        verbose=False,
     )
 
-    FINGER_LENGTH = 0.1
     env = env.unwrapped
     target_actors = [
         env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:3:0'],
         env.actors['products']['[ENV#0]_food.CRACKERS_COOKIES.OreoLemonCremeSandwichCookies:0:1:2:0'],
         env.actors['products']['[ENV#0]_food.CEREALS.NestleFitnessChocolateCereals:0:2:1:0'],
-        env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:2:0'],
+        # env.actors['products']['[ENV#0]_food.ENERGY_DRINKS.MonsterEnergyDrink:0:0:2:0'],
+        env.actors['products']['[ENV#0]_food.BEER.DuffBeerCan:0:0:1:0'],
         env.actors['products']['[ENV#0]_food.dairy_products.milkCarton:0:3:2:0'],
         # env.actors['products']['[ENV#0]_food.HOUSEHOLD.AceDetergent:0:4:2:0']
     ]
