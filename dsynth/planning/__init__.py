@@ -6,9 +6,9 @@ MP_SOLUTIONS = {
     "PickToBasketContStarsEnv": solve_fetch_pick_to_basket_cont_one_prod_w_skills,
     "PickToBasketContFantaEnv": solve_fetch_pick_to_basket_cont_one_prod_w_skills,
 
-    "MoveFromBoardToBoardVanishContEnv": solve_fetch_move_to_board_cont_one_prod,
-    "MoveFromBoardToBoardNestleContEnv": solve_fetch_move_to_board_cont_one_prod,
-    "MoveFromBoardToBoardDuffContEnv": solve_fetch_move_to_board_cont_one_prod,
+    "MoveFromBoardToBoardVanishContEnv": solve_fetch_move_to_board_cont_one_prod_w_skills,
+    "MoveFromBoardToBoardNestleContEnv": solve_fetch_move_to_board_cont_one_prod_w_skills,
+    "MoveFromBoardToBoardDuffContEnv": solve_fetch_move_to_board_cont_one_prod_w_skills,
 
     "PickFromFloorSlamContEnv": solve_fetch_pick_from_floor_cont,
     "PickFromFloorBeansContEnv": solve_fetch_pick_from_floor_cont,

@@ -12,3 +12,5 @@ outputs
 *.h5
 *.jpg
 *.csv
+demo_envs
+demo_envs_mp
