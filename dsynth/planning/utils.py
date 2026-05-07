@@ -144,21 +144,61 @@ def get_tcp_matrix(env):
     return tcp_pose.to_transformation_matrix()
 
 def get_base_pose(env):
-        return env.agent.base_link.pose
+        return env.agent.base_link.pose.sp
 
 def get_shoulder_pan_pose(env):
-    return env.agent.shoulder_pan_link.pose
+    return env.agent.shoulder_pan_link.pose.sp
+
+def get_head_pose(env):
+    return env.agent.head_camera_link.pose.sp
 
 def get_base_shift_tcp_to_target(env, target_pos: np.ndarray):
     dist_to_target = get_tcp_pose(env).p - target_pos
     dist_to_target[2] = 0
     return np.linalg.norm(dist_to_target)
 
-def get_direction_to_shelf(env):
+def get_distance_tcp_to_shelf(env, shelf_depth=DEPTH):
     actor_shelf_name = env.active_shelves[0][0]
     shelf_pos = env.actors["fixtures"]["shelves"][actor_shelf_name].pose.sp.p
     shelf_direction = env.directions_to_shelf[0]
-    return np.abs((get_tcp_pose(env).p - shelf_pos) @ shelf_direction) - DEPTH / 2
+    return np.abs((get_tcp_pose(env).p - shelf_pos) @ shelf_direction) - shelf_depth / 2
+
+def generate_sphere_grasp_info(
+    center: np.ndarray,
+    ee_direction: np.ndarray,
+    n_grasps_central = 1,
+    n_grasps_lateral = 1,
+    central_angle_range = [-np.pi/4, np.pi/4],
+    lateral_angle_range = [-np.pi/4, np.pi/4]
+):
+    approaching = ee_direction.copy()
+    approaching[2] = 0.
+    approaching = common.np_normalize_vector(approaching)
+    lateral_direction = np.cross(approaching, [0, 0, 1])
+
+    central_angles = [0.]
+    if n_grasps_central > 1:
+        central_angles.extend(np.linspace(central_angle_range[0], central_angle_range[1], n_grasps_central - 1))
+
+    lateral_angles = [0.]
+    if n_grasps_lateral > 1:
+        lateral_angles.extend(np.linspace(lateral_angle_range[0], lateral_angle_range[1], n_grasps_lateral - 1))
+
+    grasps = []
+    for central_angle, lateral_angle in itertools.product(central_angles, lateral_angles):
+        approach_vector = rodrigues_rotation(approaching, [0, 0, 1], lateral_angle)
+        approach_vector = rodrigues_rotation(approach_vector, lateral_direction, central_angle)
+        
+        closing = np.cross(approach_vector, [0, 0, 1])
+        closing = common.np_normalize_vector(closing)
+        
+        grasp_info = dict(
+            approaching=approach_vector, closing=closing, center=center,
+        )
+        grasps.append(grasp_info)
+
+    return grasps
+
 
 def compute_cylinder_grasp_info(
     actor: Actor,

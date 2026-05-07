@@ -39,8 +39,8 @@ def solve_fetch_pick_to_basket_cont_one_prod_w_skills(env: PickToBasketContEnv, 
     for target_actor_name in env.target_products_df['actor_name']:
         prod_pos = env.actors['products'][target_actor_name].pose.sp.p
     
-        if np.linalg.norm(prod_pos - get_base_pose(env).sp.p) < max_dist:
-            max_dist = np.linalg.norm(prod_pos - get_base_pose(env).sp.p)
+        if np.linalg.norm(prod_pos - get_base_pose(env).p) < max_dist:
+            max_dist = np.linalg.norm(prod_pos - get_base_pose(env).p)
             target_product_name = target_actor_name
 
     target_product_actor = env.actors['products'][target_product_name]
@@ -57,7 +57,7 @@ def solve_fetch_pick_to_basket_cont_one_prod_w_skills(env: PickToBasketContEnv, 
     # Fetch object from shelf
     # -------------------------------------------------------------------------- #
 
-    res = fetch_object_from_shelf(env, planner, target_product_actor, n_grasps=6, num_tries=5)
+    res = fetch_object_from_shelf(env, planner, target_product_actor, n_grasps=10, num_tries=5)
     if res == -1:
         return res
 
