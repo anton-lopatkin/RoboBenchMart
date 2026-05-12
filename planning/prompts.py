@@ -36,7 +36,7 @@ Briefly describe the current state of the scene relevant to the task.
 (Next Action)
 Decide on the next skill to call and explain why.
 
-{{"name": "skill_name", "params": {{"parameter": value}}}}
+<skill>{{"name": "skill_name", "params": {{"parameter": value}}}}</skill>
 """
 
 PLANNER_USER_PROMPT = """{reflection_prefix}Scene Description:
@@ -109,8 +109,8 @@ GROUNDER_SYSTEM_PROMPT = """
 You are a visual grounding model for a robot shelf placement task.
 Given a camera image and a description of a target location on a shelf, return a bounding box that tightly covers that location.
 
-Output only a JSON object:
-{{"x_min": <float>, "y_min": <float>, "x_max": <float>, "y_max": <float>}}
+Output only a JSON object wrapped in <bbox> tags:
+<bbox>{{"x_min": <float>, "y_min": <float>, "x_max": <float>, "y_max": <float>}}</bbox>
 All coordinates are normalized to [0, 1] relative to the image dimensions.
 """
 

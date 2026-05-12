@@ -31,7 +31,7 @@ class DarkstoreAgent:
         controller: Controller,
         instruction: str,
         enable_reflection: bool = True,
-        max_history_messages: int = 8,
+        max_history_messages: int = 4,
     ):
         self.model = ChatOpenRouter(model=model, api_key=OPENROUTER_API_KEY)
         self.controller = controller
@@ -73,11 +73,6 @@ class DarkstoreAgent:
             )
             return skill
 
-        if skill == "navigate_to_shelf":
-            bbox = self._call_grounder(obs, params["camera"], params["description"])
-            fn = self.controller._drive_to_shelf_bbox
-            params = {"bbox": bbox, "camera": params["camera"]}
-
         if skill == "place_to_shelf":
             bbox = self._call_grounder(obs, params["camera"], params["description"])
             fn = self.controller._place_to_shelf
@@ -109,10 +104,10 @@ class DarkstoreAgent:
         self._print_usage("grounder", answer)
         print(f"[grounder] response:\n{answer.content}")
 
-        match = re.search(r"\{.*\}", answer.content, re.DOTALL)
+        match = re.search(r"<bbox>(.*?)</bbox>", answer.content, re.DOTALL)
         if not match:
-            raise ValueError("No bbox JSON found in grounder response")
-        bbox = json.loads(match.group(0))
+            raise ValueError("No <bbox> tag found in grounder response")
+        bbox = json.loads(match.group(1).strip())
 
         self.last_grounder_image = draw_normalized_bbox(obs[camera]["image"], bbox)
         return bbox
@@ -141,11 +136,14 @@ class DarkstoreAgent:
         return answer.content
 
     def _parse_skill(self, answer):
-        match = re.search(r"\{.*\}", answer, re.DOTALL)
+        match = re.search(r"<skill>(.*?)</skill>", answer, re.DOTALL)
         if not match:
-            raise ValueError("No JSON array found in response")
-        skill = json.loads(match.group(0))
-        return skill.get("name"), skill.get("params", {})
+            raise ValueError("No <skill> tag found in response")
+        skill = json.loads(match.group(1).strip())
+        name = skill.get("name")
+        if not name:
+            raise ValueError(f"Skill JSON missing 'name' field: {skill}")
+        return name, skill.get("params", {})
 
     def _build_planner_system_message(self) -> SystemMessage:
         skills = build_skills_description(Controller)
