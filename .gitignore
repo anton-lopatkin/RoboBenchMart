@@ -16,3 +16,4 @@ outputs
 *.csv
 demo_envs
 demo_envs_mp
+logs
