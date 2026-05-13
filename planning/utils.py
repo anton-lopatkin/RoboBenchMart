@@ -21,11 +21,11 @@ def prepare_observations(env: DarkstoreContinuousBaseEnv) -> Dict[str, Any]:
         image = camera_data["rgb"][0].cpu().numpy()[:, :, ::-1]
         seg = camera_data["segmentation"][0].cpu().numpy()[..., 0]
 
-        scale = 768 / image.shape[0]
-        image = cv2.resize(
-            image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR
-        )
-        seg = cv2.resize(seg, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+        # scale = 768 / image.shape[0]
+        # image = cv2.resize(
+        #     image, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR
+        # )
+        # seg = cv2.resize(seg, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
 
         annotated_image = annotate_image(image, seg, env)
 
