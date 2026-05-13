@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -42,6 +43,9 @@ def parse_args():
     parser.add_argument(
         "--save-traj", action="store_true", help="save trajectory to h5"
     )
+    parser.add_argument(
+        "--results-log", type=str, default=None, help="append JSON line with results to this file"
+    )
     args = parser.parse_args()
     return args
 
@@ -72,6 +76,9 @@ def main(args):
         save_traj=args.save_traj,
         save_video=args.save_video,
     )
+
+    print(f"\n\nRunning evaluation (env: {args.env_id}, trials: {args.num_episodes})")
+
     results = evaluator.run_episodes(
         args.model,
         env,
@@ -80,16 +87,22 @@ def main(args):
         robot_init_pose_start_seed=args.robot_seed,
     )
 
-    print(f"success_rate={sum(results)}/{len(results)}")
+    n_total = len(results)
+    n_success = sum(r["success"] for r in results)
+    print(f"\n\nsuccess_rate={n_success}/{n_total}\n\n")
 
-    if args.vis:
-        viewer = env.render_human()
-        while True:
-            if viewer.closed:
-                exit()
-            if viewer.window.key_down("c"):
-                break
-            env.render_human()
+    if args.results_log:
+        record = {
+            "env_id": args.env_id,
+            "scene_dir": args.scene_dir,
+            "model": args.model,
+            "n_episodes": n_total,
+            "episodes": results,
+        }
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "results.json").write_text(json.dumps(record, indent=2))
+        with open(args.results_log, "a") as f:
+            f.write(json.dumps(record) + "\n")
 
     env.close()
 

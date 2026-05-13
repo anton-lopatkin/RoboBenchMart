@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -11,7 +12,7 @@ CAMERAS = ["left_base_camera_link", "fetch_hand", "right_base_camera_link", "com
 
 
 class Evaluator:
-    MAX_STEPS = 30
+    MAX_STEPS = 20
 
     def __init__(
         self,
@@ -38,7 +39,7 @@ class Evaluator:
         n: int,
         start_seed: int = None,
         robot_init_pose_start_seed: int = None,
-    ) -> list[bool]:
+    ) -> list[dict]:
         if self.save_traj or self.save_video:
             env = RecordEpisode(
                 env,
@@ -52,6 +53,8 @@ class Evaluator:
 
         results = []
         for episode in range(n):
+            print(f"\n[evaluator] running episode {episode}/{n}\n")
+
             seed = None if start_seed is None else start_seed + episode
 
             reset_options = {"reconfigure": True}
@@ -60,42 +63,62 @@ class Evaluator:
                     robot_init_pose_start_seed + episode
                 )
 
-            env.reset(seed=seed, options=reset_options)
+            try:
+                started_at = datetime.now().isoformat(timespec="seconds")
+                env.reset(seed=seed, options=reset_options)
 
-            instruction = "take 3 beers" # "take beer 98 and place it near the milk"  # env.language_instructions[0]
-            controller = Controller(env, debug=self.debug, vis=self.vis)
-            agent = DarkstoreAgent(
-                model,
-                controller,
-                instruction,
-                enable_reflection=self.enable_reflection,
-            )
+                instruction = env.unwrapped.language_instructions[0]
+                controller = Controller(env, debug=self.debug, vis=self.vis)
+                agent = DarkstoreAgent(
+                    model,
+                    controller,
+                    instruction,
+                    enable_reflection=self.enable_reflection,
+                )
 
-            for step in range(self.MAX_STEPS):
-                obs = prepare_observations(env)
+                for step in range(self.MAX_STEPS):
+                    obs = prepare_observations(env)
 
-                if self.save_images:
-                    self._save_obs(obs, episode, step)
+                    if self.save_images:
+                        self._save_obs(obs, episode, step)
 
-                status = agent.next_action(obs)
+                    status = agent.next_action(obs)
 
-                if self.save_images and agent.last_grounder_image is not None:
-                    self._save_image(
-                        self._step_dir(episode, step) / "grounder_bbox.png",
-                        agent.last_grounder_image,
-                    )
+                    if self.save_images and agent.last_grounder_image is not None:
+                        self._save_image(
+                            self._step_dir(episode, step) / "grounder_bbox.png",
+                            agent.last_grounder_image,
+                        )
 
-                if status in ("done", "fail"):
-                    break
+                    if status in ("done", "fail"):
+                        break
 
-            results.append(bool(env.unwrapped.evaluate()["success"]))
+                results.append(
+                    {
+                        "timestamp": started_at,
+                        "seed": seed, 
+                        "success": bool(env.unwrapped.evaluate()["success"]), 
+                        "crash": None,
+                    }
+                )
 
-            if self.save_traj:
-                env.flush_trajectory()
-            if self.save_video:
-                suffix = str(seed) if seed is not None else str(episode)
-                env.flush_video(suffix)
+                if self.save_traj:
+                    env.flush_trajectory()
+                if self.save_video:
+                    suffix = str(seed) if seed is not None else str(episode)
+                    env.flush_video(suffix)
 
+            except Exception as e:
+                print(f"[evaluator] episode {episode} crashed: {e}")
+                results.append(
+                    {
+                        "timestamp": started_at,
+                        "seed": seed, 
+                        "success": bool(env.unwrapped.evaluate()["success"]), 
+                        "crash": str(e),
+                    }
+                )
+                
         return results
 
     def _step_dir(self, episode: int, step: int) -> Path:
