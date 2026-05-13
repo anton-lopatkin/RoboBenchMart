@@ -13,3 +13,7 @@ msgpack
 huggingface_hub[cli]
 openai
 dotenv
+langchain
+langchain-core
+langchain-openrouter
+opencv-python
