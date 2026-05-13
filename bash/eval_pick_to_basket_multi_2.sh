@@ -6,20 +6,15 @@ EXTRA_ARGS="${@:3}"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 MODEL_SAFE="${MODEL//\//_}"
-LOG_FILE="logs/pick_to_basket_multi_${MODEL_SAFE}_${TIMESTAMP}.log"
-RESULTS_FILE="logs/results_pick_to_basket_multi_${MODEL_SAFE}_${TIMESTAMP}.jsonl"
+LOG_FILE="logs/pick_to_basket_multi_2_${MODEL_SAFE}_${TIMESTAMP}.log"
+RESULTS_FILE="logs/results_pick_to_basket_multi_2_${MODEL_SAFE}_${TIMESTAMP}.jsonl"
 mkdir -p logs
 
 TASKS=(
-  "demo_envs/pick_to_basket_diet PickToBasketDietContEnv"
-  "demo_envs/pick_to_basket_no_alcohol PickToBasketNoAlcoholContEnv"
   "demo_envs/pick_to_basket_red_bull PickToBasketRedBullContEnv"
   "demo_envs/pick_to_basket_lactose PickToBasketLactoseContEnv"
   "demo_envs/pick_to_basket_mojito PickToBasketMojitoContEnv"
   "demo_envs/pick_to_basket_british_tea PickToBasketBritishTeaContEnv"
-  "demo_envs/pick_to_basket_cuba_libre PickToBasketCubaLibreContEnv"
-  "demo_envs/pick_to_basket_grandma_tea PickToBasketGrandmaTeaContEnv"
-  "demo_envs/pick_to_basket_kids_party PickToBasketKidsPartyContEnv"
   "demo_envs/pick_to_basket_overnight_oats PickToBasketOvernightOatsContEnv"
 )
 
