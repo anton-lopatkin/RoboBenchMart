@@ -154,11 +154,66 @@ class PickToBasketMultiContEnv(PickToBasketContEnv):
             self.language_instructions.append(self.LANGUAGE_INSTRUCTION)
 
 
-@register_env("PickToBasketMultiLatteContEnv", max_episode_steps=200000)
-class PickToBasketMultiLatteContEnv(PickToBasketMultiContEnv):
-    LANGUAGE_INSTRUCTION = "prepare the ingredients for a latte"
+@register_env('PickToBasketDietContEnv', max_episode_steps=200000)
+class PickToBasketDietContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "grab me a drink, I'm on a diet"
+    TARGET_PRODUCTS_NAMES = ['Coca-Cola Zero Sugar Byte']
 
-    TARGET_PRODUCTS_NAMES = ["auchan milk", "myboo coffee package"]
+
+@register_env('PickToBasketNoAlcoholContEnv', max_episode_steps=200000)
+class PickToBasketNoAlcoholContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "get me a non-alcohol drink"
+    TARGET_PRODUCTS_NAMES = ['fanta bottle']
+
+
+@register_env('PickToBasketRedBullContEnv', max_episode_steps=200000)
+class PickToBasketRedBullContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "get me the drink that gives you wings"
+    TARGET_PRODUCTS_NAMES = ['Red Bull Energy Drink']
+
+
+@register_env('PickToBasketLactoseContEnv', max_episode_steps=200000)
+class PickToBasketLactoseContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "I'm lactose intolerant, get me a milk alternative"
+    TARGET_PRODUCTS_NAMES = ['Oatly Milk']
+
+
+@register_env("PickToBasketMojitoContEnv", max_episode_steps=200000)
+class PickToBasketMojitoContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "make me a mojito"
+    TARGET_PRODUCTS_NAMES = ["Havana Club Rum", "sprite"]
+
+
+@register_env("PickToBasketBritishTeaContEnv", max_episode_steps=200000)
+class PickToBasketBritishTeaContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "make me British cup of tea"
+    TARGET_PRODUCTS_NAMES = ["Sir Winston Tea", "auchan milk"]
+
+
+@register_env("PickToBasketCubaLibreContEnv", max_episode_steps=200000)
+class PickToBasketCubaLibreContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "make me a Cuba Libre"
+    TARGET_PRODUCTS_NAMES = ["Havana Club Rum", "coca cola can"]
+
+
+@register_env("PickToBasketGrandmaTeaContEnv", max_episode_steps=200000)
+class PickToBasketGrandmaTeaContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "my grandma is coming over for tea, get me products"
+    TARGET_PRODUCTS_NAMES = ["Sir Winston Tea", "Richmond fudgey Rounds"]
+
+
+@register_env("PickToBasketKidsPartyContEnv", max_episode_steps=200000)
+class PickToBasketKidsPartyContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "get me drinks and snacks for a kids' party"
+    TARGET_PRODUCTS_NAMES = ["Orion Choco-Pie", "Pringles Original", "Cepita Peach Juice"]
+
+
+@register_env("PickToBasketOvernightOatsContEnv", max_episode_steps=200000)
+class PickToBasketOvernightOatsContEnv(PickToBasketMultiContEnv):
+    LANGUAGE_INSTRUCTION = "get me overnight oats ingredients with a sweet topping"
+    LANGUAGE_INSTRUCTION = "get me jam"
+    TARGET_PRODUCTS_NAMES = ["Havre Gryn Oats", "auchan milk", "Homemade Jam"]
+    
 
     # TARGET_PRODUCTS_NAMES = [
     #     ['auchan milk', 'milk', 'plastic milk bottle'],
