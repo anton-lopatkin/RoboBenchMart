@@ -1,0 +1,30 @@
+defaults:
+  - config
+  - _self_
+
+name: 'fix_arrangement'
+output_dir: demo_envs/fix_arrangement
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 17
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: False
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.CEREALS.CoraCornFlakes: 6
+      1:
+        food.MILK.OatlyMilk: 6
+      2:
+        food.BEER.DuffBeerCan: 6
+      3:
+        food.CHIPS.PringlesOriginal: 6

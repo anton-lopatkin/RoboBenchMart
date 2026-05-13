@@ -1,0 +1,41 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_british_tea'
+output_dir: demo_envs/pick_to_basket_british_tea
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 91
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.COFFEE_TEA.SirWinstonTea: 3
+        food.COFFEE_TEA.EternalSunshineSpiceTea: 2
+        food.COFFEE_TEA.JacobsCappuccino: 2
+      1:
+        food.COFFEE_TEA.GeorgiaCannedCoffee: 2
+        food.COFFEE_TEA.AsahiWondaCoffee: 2
+        food.COFFEE_TEA.NescafeOriginal: 2
+        food.COFFEE_TEA.DrosteCacao: 2
+      2:
+        food.dairy_products.milkCarton: 3
+        food.YOGHURTS.ShoburtisimoYogurt: 2
+        food.YOGHURTS.GreekDrinkingYogurt: 2
+        food.YOGHURTS.ChobaniYogurt: 2
+      3:
+        food.BEER.HeinekenLagerBeerBottle: 2
+        food.drinks.fanta: 2
+        food.drinks.pepsi: 2
+        food.CHIPS.PringlesOriginal: 2

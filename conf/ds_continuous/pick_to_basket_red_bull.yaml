@@ -1,0 +1,40 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_red_bull'
+output_dir: demo_envs/pick_to_basket_red_bull
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 31
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.ENERGY_DRINKS.RedBullEnergyDrink: 3
+        food.ENERGY_DRINKS.MonsterEnergyDrink: 2
+        food.ENERGY_DRINKS.LitEnergyDrinkClassic: 2
+        food.ENERGY_DRINKS.BlazingEnergyDrink: 2
+      1:
+        food.drinks.cocaColaCan: 2
+        food.drinks.fanta: 2
+        food.drinks.pepsi: 2
+        food.drinks.mountainDew: 2
+      2:
+        food.BEER.HeinekenLagerBeerBottle: 2
+        food.BEER.DuffBeerCan: 2
+        food.BEER.KaniBeerCan: 2
+      3:
+        food.JUICE.TropicaOrangeJuice: 2
+        food.JUICE.FloridaMultifruitJuice: 2
+        food.JUICE.GamereadyOrangeJuice: 2

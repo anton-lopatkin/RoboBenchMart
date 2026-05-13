@@ -1,0 +1,41 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_rice_pudding'
+output_dir: demo_envs/pick_to_basket_rice_pudding
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 83
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.RICE_SPAGHETTI.RiceARoniLongGrainRice: 3
+        food.RICE_SPAGHETTI.EssentialWaitrosePennePasta: 2
+        food.RICE_SPAGHETTI.BeneaRigatoniPasta: 2
+        food.RICE_SPAGHETTI.BarillaFarfallePasta: 2
+      1:
+        food.dairy_products.milkCarton: 3
+        food.YOGHURTS.ShoburtisimoYogurt: 2
+        food.YOGHURTS.GreekDrinkingYogurt: 2
+        food.YOGHURTS.ChobaniYogurt: 2
+      2:
+        food.SWEET.RaspberryJam: 3
+        food.SAUCES.PudliszkyKetchup: 2
+        food.CANNED.TunaCan: 2
+        food.SWEET.PeterPanPeanutButter: 2
+      3:
+        food.CHIPS.PringlesOriginal: 2
+        food.drinks.cocaColaCan: 2
+        food.drinks.fanta: 2

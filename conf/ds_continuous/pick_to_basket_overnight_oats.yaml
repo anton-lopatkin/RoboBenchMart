@@ -1,0 +1,41 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_overnight_oats'
+output_dir: demo_envs/pick_to_basket_overnight_oats
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 57
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.COOKING.HavreGrynOats: 2
+        food.COOKING.VandemoorteleFryingOil: 2
+        food.COOKING.AriddlIodisedTableSalt: 2
+        food.COOKING.TescoTableSalt: 2
+      1:
+        food.dairy_products.milkCarton: 3
+        food.MILK.VitaChocolateMilk: 3
+        food.COOKING.ButterWithCanolaOil: 3
+      2:
+        food.SAUCES.PudliszkyKetchup: 2
+        food.SWEET.HomemadeJam: 2
+        food.SWEET.TanukiDrops: 2
+        food.SWEET.PeterPanPeanutButter: 2
+      3:
+        food.COFFEE_TEA.NescafeOriginal: 2
+        food.COFFEE_TEA.SirWinstonTea: 2
+        food.drinks.cocaColaCan: 2
+        food.CHIPS.PringlesOriginal: 2

@@ -1,0 +1,42 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_mojito'
+output_dir: demo_envs/pick_to_basket_mojito
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 77
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.CHIPS.PringlesCheddarCheese: 2
+        food.CHIPS.PringlesOriginal: 2
+        food.CHIPS.PringlesOriginalSmall: 2
+        food.CHIPS.PaprikaPotatoChips: 2
+      1:
+        food.drinks.sprite2p25l: 2
+        food.drinks.fanta: 2
+        food.drinks.pepsi: 2
+        food.drinks.mountainDew: 2
+      2:
+        food.BEER.HeinekenLagerBeerBottle: 2
+        food.BEER.CoronaExtraBeerBottle: 2
+        food.BEER.DuffBeerCan: 2
+        food.BEER.KaniBeerCan: 2
+      3:
+        food.STRONG_ALCO.HavanaClubRum: 2
+        food.STRONG_ALCO.AbsolutVodka: 2
+        food.STRONG_ALCO.JackDanielsWhiskey: 2
+        food.STRONG_ALCO.OlmecaTequila: 2

@@ -1,0 +1,42 @@
+defaults:
+  - config
+  - _self_
+
+name: 'pick_to_basket_kids_party'
+output_dir: demo_envs/pick_to_basket_kids_party
+rewrite: true
+num_scenes: 10
+num_workers: 2
+
+random_seed: 61
+
+active_shelvings_list:
+  - name: 'mixed_shelf'
+    filling_type: BOARDWISE_COLUMNS
+    x_gap: 0.06
+    y_gap: 0.02
+    delta_x: 0.1
+    shelf_asset: fixtures.shelf_metal
+    shuffle_boards: True
+    shuffle_items_on_board: True
+    board_product_numcol:
+      0:
+        food.SWEET.OrionChoco-Pie: 1
+        food.SAUCES.McilhennyTabascoPepperSauce: 3
+        food.CANNED.TunaCan: 2
+        food.SAUCES.PudliszkyKetchup: 3
+      1:
+        food.JUICE.CepitaPeachJuice: 1
+        food.ENERGY_DRINKS.MonsterEnergyDrink: 2
+        food.STRONG_ALCO.JackDanielsWhiskey: 2
+        food.WINE.ChateauBaronDeLievreRedWine: 2
+      2:
+        food.BEER.HeinekenLagerBeerBottle: 2
+        food.BEER.CoronaExtraBeerBottle: 2
+        food.STRONG_ALCO.HavanaClubRum: 2
+        food.STRONG_ALCO.AbsolutVodka: 2
+      3:
+        food.CHIPS.PringlesOriginal: 1
+        food.CANNED.ArgonautAlaskaSalmon: 2
+        food.QUICK_FOOD.NongshimShinRamen: 3
+        food.SAUCES.GreyPouponMustard: 3
