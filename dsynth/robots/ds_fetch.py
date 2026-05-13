@@ -32,8 +32,8 @@ class DSFetchBasket(Fetch):
             CameraConfig(
                 uid="fetch_hand",
                 pose=Pose.create_from_pq([0.1, 0, -0.1], euler.euler2quat(np.pi, -np.pi / 2, 0)),
-                width=128,
-                height=128,
+                width=1200,
+                height=1200,
                 fov=2,
                 near=0.01,
                 far=100,
@@ -42,8 +42,8 @@ class DSFetchBasket(Fetch):
             CameraConfig(
                 uid="left_base_camera_link",
                 pose=Pose.create_from_pq([-0.5, 0.5, 0], euler.euler2quat(0, 0.3, -0.2)),
-                width=256,
-                height=256,
+                width=1200,
+                height=1200,
                 fov=1.5,
                 near=0.01,
                 far=100,
@@ -52,8 +52,8 @@ class DSFetchBasket(Fetch):
             CameraConfig(
                 uid="right_base_camera_link",
                 pose=Pose.create_from_pq([-0.5, -0.5, 0], euler.euler2quat(0, 0.3, 0.2)),
-                width=256,
-                height=256,
+                width=1200,
+                height=1200,
                 fov=1.5,
                 near=0.01,
                 far=100,
